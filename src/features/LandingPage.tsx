@@ -127,7 +127,7 @@ export default function LandingPage() {
               to="/signup" 
               className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-cyan-500 text-white font-semibold shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 hover:-translate-y-0.5 border-2 border-transparent relative overflow-hidden group"
             >
-              <span className="relative z-10">Cadastrar-se</span>
+              <span className="relative z-10">Cadastrar -se</span>
               <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-sky-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
             </Link>
           </div>
