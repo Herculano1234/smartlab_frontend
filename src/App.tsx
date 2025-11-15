@@ -15,7 +15,7 @@ import PresencasProfPage from './features/Telas_Professores/PresencasProfPage';
 import MateriaisProfPage from './features/Telas_Professores/MateriaisProfPage';
 import RelatoriosProfPage from './features/Telas_Professores/RelatoriosProfPage';
 import PerfilProfPage from './features/Telas_Professores/PerfilProfPage';
-import CadrastoMaterial from './features/cadrastoMaterias';
+import CadrastoMaterial from './features/CadrastoMaterial';
 import { Routes, Route, useLocation, Navigate, Outlet } from "react-router-dom";
 function RequireAuth({ perfil }: { children?: React.ReactNode; perfil: string }) {
   // usar chaves lowercase definidas pelo login de desenvolvimento
