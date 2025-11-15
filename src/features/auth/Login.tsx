@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "@fortawesome/fontawesome-free/css/all.min.css";
+import api from "../../api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -14,32 +15,34 @@ export default function Login() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    // senha fixa para desenvolvimento: smartlab@gmail / 1
     if (!email || !password) {
       setError("Por favor, preencha todos os campos.");
       return;
     }
 
-    setLoading(true);
-    setTimeout(() => {
-      // Login de desenvolvimento: aceita apenas smartlab@gmail / 1
-      if (email === "smartlab@gmail" && password === "1") {
-        const finalPerfil = perfil || "estagiario"; // default para estagiario se não selecionado
-        // gravação simples no localStorage (apenas para desenvolvimento)
+    (async () => {
+      try {
+        setLoading(true);
+        const resp = await api.post("/auth/login", { email: email.trim(), password });
+        const user = resp.data;
+
+        // Salva informações mínimas no localStorage (ajuste conforme trocar para JWT)
         localStorage.setItem("smartlab-auth", "true");
+        localStorage.setItem("smartlab-user", JSON.stringify(user));
+
+        // perfil selecionado tem prioridade, senão use role retornado pelo backend
+        const finalPerfil = perfil || user.role || "estagiario";
         localStorage.setItem("smartlab-perfil", finalPerfil);
+
         setLoading(false);
-        // redirecionar para as rotas definidas em App.tsx
-        if (finalPerfil === "estagiario") {
-          navigate("/estagiario");
-        } else {
-          navigate("/");
-        }
-      } else {
+        if (finalPerfil === "estagiario") navigate("/estagiario");
+        else navigate("/");
+      } catch (err: any) {
         setLoading(false);
-        setError("Credenciais inválidas. Use smartlab@gmail / 1 para desenvolvimento.");
+        const message = err?.response?.data?.error || err?.response?.data?.message || err.message || "Erro ao autenticar.";
+        setError(String(message));
       }
-    }, 600);
+    })();
   };
 
   return (
