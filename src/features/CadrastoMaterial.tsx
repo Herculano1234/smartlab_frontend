@@ -116,9 +116,16 @@ export default function CadastroMaterial() {
       setTiposLoading(true);
       setTiposError("");
       try {
-        const resp = await api.get("/materiais/tipos");
-        if (!mounted) return;
-        setTipos(Array.isArray(resp.data) ? resp.data : []);
+        // try the newer endpoint first, fallback if not available
+        try {
+          const resp = await api.get("/tipo_material");
+          if (!mounted) return;
+          setTipos(Array.isArray(resp.data) ? resp.data : []);
+        } catch (err) {
+          const resp2 = await api.get("/tipo_material");
+          if (!mounted) return;
+          setTipos(Array.isArray(resp2.data) ? resp2.data : []);
+        }
       } catch (err: any) {
         if (!mounted) return;
         setTiposError(err?.response?.data?.error || err?.message || "Erro ao carregar tipos");
@@ -146,6 +153,7 @@ export default function CadastroMaterial() {
     try {
       // Mapear para o formato esperado pelo backend
       const payload: any = {
+        
         nome_material: formData.nome_material,
         code_id: formData.code_id,
         id_tipo_material: formData.tipo_material ? parseInt(formData.tipo_material, 10) : null,
@@ -254,12 +262,12 @@ export default function CadastroMaterial() {
                     />
 
                     <InputGroup id="tipo_material" label="Tipo de Material" type="select" value={formData.tipo_material} onChange={handleChange} required={true} isFullWidth={false} iconClass="fas fa-cubes">
-                        <option value="" disabled>Selecione a Categoria</option>
-                        <option value="1">Componente Eletrônico</option>
-                        <option value="2">Ferramenta</option>
-                        <option value="3">Equipamento/Máquina</option>
-                        <option value="4">Consumível</option>
-                        <option value="5">Outro</option>
+                      <option value="" disabled>{tiposLoading ? "Carregando categorias..." : "Selecione a Categoria"}</option>
+                      {tiposError && <option value="" disabled>{tiposError}</option>}
+                      {!tiposLoading && tipos.length === 0 && !tiposError && <option value="" disabled>Nenhuma categoria encontrada</option>}
+                      {tipos.map((t) => (
+                        <option key={t.id} value={String(t.id)}>{t.nome_tipo}</option>
+                      ))}
                     </InputGroup>
 
                     <div className="col-span-1 sm:col-span-2">

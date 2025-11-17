@@ -11,18 +11,23 @@ import RelatoriosPage from './features/Telas_Estagiarios/RelatoriosPage';
 import PerfilPage from './features/Telas_Estagiarios/PerfilPage';
 import NotFound from './components/NotFound';
 import ProfessorHome from './features/Telas_Professores/ProfessorHome';
+import ProfessorLayout from './layouts/ProfessorLayout';
 import PresencasProfPage from './features/Telas_Professores/PresencasProfPage';
 import MateriaisProfPage from './features/Telas_Professores/MateriaisProfPage';
 import RelatoriosProfPage from './features/Telas_Professores/RelatoriosProfPage';
 import PerfilProfPage from './features/Telas_Professores/PerfilProfPage';
+import EstagiariosProfPage from './features/Telas_Professores/EstagiariosProfPage';
+import EstagiosProfPage from './features/Telas_Professores/EstagiosProfPage';
+import EmprestimosProfPage from './features/Telas_Professores/EmprestimosProfPage';
 import CadrastoMaterial from './features/CadrastoMaterial';
 import { Routes, Route, useLocation, Navigate, Outlet } from "react-router-dom";
 function RequireAuth({ perfil }: { children?: React.ReactNode; perfil: string }) {
   // usar chaves lowercase definidas pelo login de desenvolvimento
   const isAuth = localStorage.getItem("smartlab-auth") === "true";
-  const userPerfil = localStorage.getItem("smartlab-perfil");
+  const userPerfil = (localStorage.getItem("smartlab-perfil") || "").toLowerCase().trim();
   const location = useLocation();
-  if (!isAuth || userPerfil !== perfil) {
+  const reqPerfil = (perfil || "").toLowerCase().trim();
+  if (!isAuth || userPerfil !== reqPerfil) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   return <Outlet />;
@@ -74,12 +79,15 @@ function App() {
 
       {/* Rotas do Professor (protegidas) */}
       <Route element={<RequireAuth perfil="professor" />}>
-        <Route path="/professor" element={<ProfissionalLayout />}>
-          <Route index element={<ProfessorHome />} />
-          <Route path="presencas" element={<PresencasProfPage />} />
-          <Route path="materiais" element={<MateriaisProfPage />} />
-          <Route path="relatorios" element={<RelatoriosProfPage />} />
-          <Route path="perfil" element={<PerfilProfPage />} />
+        <Route path="/professor" element={<ProfessorLayout />}>
+            <Route index element={<ProfessorHome />} />
+            <Route path="estagiarios" element={<EstagiariosProfPage />} />
+            <Route path="estagios" element={<EstagiosProfPage />} />
+            <Route path="emprestimos" element={<EmprestimosProfPage />} />
+            <Route path="presencas" element={<PresencasProfPage />} />
+            <Route path="materiais" element={<MateriaisProfPage />} />
+            <Route path="relatorios" element={<RelatoriosProfPage />} />
+            <Route path="perfil" element={<PerfilProfPage />} />
         </Route>
       </Route>
 
