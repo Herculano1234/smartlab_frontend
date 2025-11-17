@@ -89,6 +89,61 @@ const itemVariants = {
     visible: { opacity: 1, y: 0 }
 };
 
+// Componente de Linha da Tabela Otimizado para Mobile
+const TableRowMobileOptimized: React.FC<{ e: Estagiario }> = ({ e }) => (
+    // Usa TR como um 'cartão' no mobile
+    <motion.tr 
+        key={e.id} 
+        className="hover:bg-gray-50 dark:hover:bg-gray-700 transition duration-150 cursor-pointer border-b dark:border-gray-700"
+        whileHover={{ scale: 1.01, boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
+    >
+        <td className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+            {/* Bloco de Informações do Estagiário */}
+            <div className="flex items-start space-x-3 flex-grow min-w-0">
+                <User className="w-5 h-5 mt-1 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+                <div className='min-w-0'>
+                    <div className="font-semibold text-gray-900 dark:text-white truncate">{e.nome}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Proc.: {e.processo} | Turma: {e.turma}
+                    </div>
+                    {/* Detalhes Adicionais - Visíveis apenas no mobile */}
+                    <div className="mt-2 space-y-1 text-xs sm:hidden">
+                        <div className='text-gray-700 dark:text-gray-300'>
+                            <span className='font-medium'>{e.curso}</span> / {e.area}
+                        </div>
+                        <div className='flex items-center space-x-2'>
+                            <StatusTag status={e.status} />
+                            <span className='text-gray-600 dark:text-gray-400'>
+                                Frequência: 
+                                <span className={e.frequencia < 80 ? 'font-bold text-red-600' : 'text-green-600 dark:text-green-400 ml-1'}>
+                                    {e.frequencia}%
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Ações e Status (em linha no desktop, alinhado à direita no mobile) */}
+            <div className="flex justify-start sm:justify-center items-center space-x-2 mt-3 sm:mt-0">
+                {/* Status e Frequência para telas sm (tablet) */}
+                <div className='hidden sm:block md:hidden text-right'>
+                    <StatusTag status={e.status} />
+                    <div className='text-xs text-gray-600 dark:text-gray-400 mt-1'>
+                         Freq: <span className={e.frequencia < 80 ? 'font-bold text-red-600' : 'text-green-600 dark:text-green-400'}>{e.frequencia}%</span>
+                    </div>
+                </div>
+
+                {/* Botões de Ação */}
+                <motion.button title="Ver Perfil" className="p-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition" whileHover={{ scale: 1.15 }}><User className="w-5 h-5" /></motion.button>
+                <motion.button title="Ver Relatórios" className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 transition" whileHover={{ scale: 1.15 }}><FileText className="w-5 h-5" /></motion.button>
+                <motion.button title="Ver Presenças" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }}><CalendarCheck className="w-5 h-5" /></motion.button>
+            </div>
+        </td>
+    </motion.tr>
+);
+
+
 // === COMPONENTE PRINCIPAL ===
 
 export default function EstagiariosProfPage() {
@@ -97,9 +152,9 @@ export default function EstagiariosProfPage() {
   const [filterTurma, setFilterTurma] = useState<string | 'Todos'>('Todos');
   const [filterStatus, setFilterStatus] = useState<EstagioStatus | 'Todos'>('Todos');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5; // Configuração básica de paginação
+  const itemsPerPage = 5; 
 
-  // Lógica de Filtragem e Busca
+  // Lógica de Filtragem e Busca (inalterada)
   const filteredEstagiarios = useMemo(() => {
     return mockEstagiarios.filter(estagiario => {
       const matchesSearch = 
@@ -110,8 +165,7 @@ export default function EstagiariosProfPage() {
       const matchesTurma = filterTurma === 'Todos' || estagiario.turma === filterTurma;
       const matchesStatus = filterStatus === 'Todos' || estagiario.status === filterStatus;
       
-      // Filtro de Frequência (Ex: mostrar quem tem < 80%)
-      const matchesFrequencia = true; // Placeholder: poderia ser implementado com um slider/input
+      const matchesFrequencia = true;
 
       return matchesSearch && matchesCurso && matchesTurma && matchesStatus && matchesFrequencia;
     });
@@ -132,9 +186,10 @@ export default function EstagiariosProfPage() {
 
   // Renderiza a lista de filtros de forma elegante
   const renderFilterButtons = (label: string, options: string[], currentFilter: string, setFilter: (val: any) => void) => (
+    // Melhoria de Responsividade 1: 'flex-col sm:flex-row' garante empilhamento em mobile
     <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
-      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}:</span>
-      <div className="flex flex-wrap gap-2">
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 min-w-[60px]">{label}:</span> {/* min-width para rótulo */}
+      <div className="flex flex-wrap gap-2"> {/* 'flex-wrap' para quebra de linha dos botões */}
         {['Todos', ...options].map(option => (
           <button
             key={option}
@@ -159,13 +214,13 @@ export default function EstagiariosProfPage() {
       
       {/* Container principal com animação de entrada */}
       <motion.main 
-        className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8"
+        className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8" // Padding responsivo
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
         
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-2xl sm:text-3xl">
             Acompanhamento de Estagiários
         </h1>
 
@@ -186,7 +241,7 @@ export default function EstagiariosProfPage() {
                   placeholder="Buscar por nome ou N° de Processo..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white text-sm" // 'text-sm' para melhor encaixe em mobile
                 />
               </div>
 
@@ -217,7 +272,7 @@ export default function EstagiariosProfPage() {
 
             {/* 2. Lista de Estagiários (Tabela Responsiva) */}
             <motion.div 
-                className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-lg overflow-x-auto"
+                className="bg-white dark:bg-gray-800 rounded-xl p-2 sm:p-5 shadow-lg overflow-x-auto" // p-2 em mobile
                 variants={itemVariants}
             >
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
@@ -229,12 +284,14 @@ export default function EstagiariosProfPage() {
                   Nenhum estagiário encontrado com os filtros aplicados.
                 </div>
               ) : (
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <>
+                {/* Tabela para Desktop/Tablet (Visível em md:table ou maior) */}
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 hidden md:table"> {/* Hidden em mobile */}
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estagiário</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Curso / Área</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Frequência</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Curso / Área</th> {/* Removido 'hidden' */}
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Frequência</th> {/* Removido 'hidden' */}
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                     </tr>
@@ -260,14 +317,14 @@ export default function EstagiariosProfPage() {
                           </div>
                         </td>
                         
-                        {/* Coluna 2: Curso / Área (Oculta em mobile) */}
-                        <td className="px-4 py-4 whitespace-nowrap hidden md:table-cell">
+                        {/* Coluna 2: Curso / Área */}
+                        <td className="px-4 py-4 whitespace-nowrap"> {/* Removido hidden md:table-cell */}
                           <div className='text-sm text-gray-700 dark:text-gray-300'>{e.curso}</div>
                           <div className='text-xs text-gray-500 dark:text-gray-400'>{e.area}</div>
                         </td>
                         
-                        {/* Coluna 3: Frequência (Oculta em mobile) */}
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-center hidden sm:table-cell">
+                        {/* Coluna 3: Frequência */}
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-center"> {/* Removido hidden sm:table-cell */}
                           <span className={e.frequencia < 80 ? 'font-bold text-red-600' : 'text-green-600 dark:text-green-400'}>
                             {e.frequencia}%
                           </span>
@@ -290,6 +347,26 @@ export default function EstagiariosProfPage() {
                     ))}
                   </motion.tbody>
                 </table>
+
+                {/* Lista Mobile (Visível apenas abaixo de md) */}
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 md:hidden">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                        <tr>
+                            {/* Apenas duas colunas para o mobile */}
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-3/4">Estagiário e Detalhes</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Ações</th>
+                        </tr>
+                    </thead>
+                    <motion.tbody 
+                        className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
+                    >
+                        {currentEstagiarios.map(e => (
+                            <TableRowMobileOptimized key={e.id} e={e} />
+                        ))}
+                    </motion.tbody>
+                </table>
+
+                </>
               )}
             </motion.div>
 
@@ -306,7 +383,7 @@ export default function EstagiariosProfPage() {
                     >
                         <ChevronsLeft className='w-5 h-5' />
                     </button>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 text-center flex-1"> {/* flex-1 para centralizar melhor */}
                         Página {currentPage} de {totalPages}
                     </span>
                     <button
@@ -324,7 +401,7 @@ export default function EstagiariosProfPage() {
                 className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-lg border-l-4 border-red-500"
                 variants={itemVariants}
             >
-              <div className="flex items-center space-x-3">
+              <div className="flex items-start space-x-3"> {/* items-start para evitar desalinhamento vertical */}
                 <Monitor className="w-6 h-6 text-red-500 flex-shrink-0" />
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-white">Alerta de Acompanhamento</h3>
@@ -340,4 +417,4 @@ export default function EstagiariosProfPage() {
       </motion.main>
     </div>
   );
-}
+} 
