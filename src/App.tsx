@@ -19,7 +19,7 @@ import PerfilProfPage from './features/Telas_Professores/PerfilProfPage';
 import EstagiariosProfPage from './features/Telas_Professores/EstagiariosProfPage';
 import EstagiosProfPage from './features/Telas_Professores/EstagiosProfPage';
 import EmprestimosProfPage from './features/Telas_Professores/EmprestimosProfPage';
-import CadrastoMaterial from './features/CadrastoMaterial';
+import CadastroMaterial from './features/CadastroMaterial';
 import { Routes, Route, useLocation, Navigate, Outlet } from "react-router-dom";
 function RequireAuth({ perfil }: { children?: React.ReactNode; perfil: string }) {
   // usar chaves lowercase definidas pelo login de desenvolvimento
@@ -64,7 +64,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/" element={<LandingPage />} />
-      <Route path="/cadastro-material" element={<CadrastoMaterial />} />
+      <Route path="/cadastro-material" element={<CadastroMaterial />} />
 
       {/* Rotas do Estagiário (protegidas) */}
       <Route element={<RequireAuth perfil="estagiario" />}>
