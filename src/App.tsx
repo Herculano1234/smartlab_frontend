@@ -22,6 +22,7 @@ import EstagiosProfPage from './features/Telas_Professores/EstagiosProfPage';
 import EmprestimosProfPage from './features/Telas_Professores/EmprestimosProfPage';
 import CadastroMaterial from './features/CadastroMaterial';
 import EstagioProfile from './features/Telas_Professores/EstagioProfile';
+
 import { Routes, Route, useLocation, Navigate, Outlet } from "react-router-dom";
 function RequireAuth({ perfil }: { children?: React.ReactNode; perfil: string }) {
   // usar chaves lowercase definidas pelo login de desenvolvimento
