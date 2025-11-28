@@ -83,7 +83,7 @@ interface InputGroupProps {
   required?: boolean;
   isFullWidth?: boolean;
   children?: React.ReactNode;
-  disabled?: boolean;
+  disabled?: boolean; // Adicionado para controle
 }
 
 const stepsConfig = [
@@ -92,7 +92,7 @@ const stepsConfig = [
   { id: 3, title: "Acesso ao Sistema", icon: "fas fa-shield-alt" },
 ];
 
-// ==================== COMPONENTE INPUTGROUP (COM CORREÇÃO DE VALOR) ====================
+// ==================== COMPONENTE INPUTGROUP (CORRIGIDO) ====================
 const InputGroup = memo(({ 
   id, 
   label, 
@@ -103,8 +103,9 @@ const InputGroup = memo(({
   required = true, 
   isFullWidth = false, 
   children,
-  disabled = false
+  disabled = false // Valor default
 }: InputGroupProps) => {
+  // Adicionado o estilo para disabled, essencial para a visibilidade do valor
   const InputStyle = "w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none bg-white transition-colors duration-300 placeholder-gray-400 shadow-sm disabled:bg-gray-100 disabled:cursor-not-allowed";
   
   return (
@@ -137,47 +138,42 @@ const InputGroup = memo(({
         <input
           type={type}
           id={id}
-          // CORREÇÃO: Garante que o valor é uma string para inputs controlados, especialmente quando desabilitados.
+          // CORREÇÃO ESSENCIAL: Garante que o valor (mesmo que nulo/vazio) seja tratado como string, o que é crucial para inputs desabilitados em React.
           value={String(value)} 
           onChange={onChange}
           className={`${InputStyle} pt-6`}
           placeholder={placeholder}
           required={required}
-          disabled={disabled}
+          disabled={disabled} // Aplica o estado disabled
         />
       )}
     </div>
   );
 });
 
-// ==================== COMPONENTE STEP3 COM RFID MODIFICADO (CORREÇÃO DE LÓGICA) ====================
+// ==================== COMPONENTE STEP3 COM RFID MODIFICADO (POLLING AUTOMÁTICO E LÓGICA CORRIGIDA) ====================
 const Step3RFID = memo(({ formData, handleChange }: { formData: FormData; handleChange: any }) => {
   const [loadingRfid, setLoadingRfid] = useState(false);
-  const [lastRfidFetch, setLastRfidFetch] = useState<boolean | null>(null);
+  // Estados para melhor feedback visual
+  const [lastRfidStatus, setLastRfidStatus] = useState<'idle' | 'searching' | 'found' | 'error'>('idle');
 
   const buscarUID = useCallback(async () => {
-    // 1. Limpa o código anterior ao iniciar nova busca
-    handleChange({
-        target: {
-            id: 'codigoRFID',
-            value: '' 
-        }
-    });
-
-    setLoadingRfid(true);
-    setLastRfidFetch(null);
+    // Se o código já foi encontrado, não faz nada
+    if (formData.codigoRFID) return;
     
+    setLoadingRfid(true);
+    setLastRfidStatus('searching');
+
     try {
-      console.log('Iniciando busca de código RFID em /rfid...');
+      console.log('Iniciando busca automática de código RFID em /rfid...');
+      // Usando a instância 'api' (Axios) corretamente
       const response = await api.get('/rfid'); 
       const data = response.data;
       
-      // Log da resposta (mantido para debug do usuário)
       console.log('Resposta RFID:', data);
-      
-      // CORREÇÃO APLICADA: Verifica apenas a existência de data.code.
-      // Ignoramos 'data.disponivel' para garantir que o campo seja preenchido se o código vier.
-      if (data.code) { 
+
+      // CORREÇÃO CRÍTICA: Verifica APENAS a existência do código.
+      if (data.code && String(data.code).trim() !== "") { 
         // 2. Define o código no formulário
         handleChange({
           target: {
@@ -185,74 +181,54 @@ const Step3RFID = memo(({ formData, handleChange }: { formData: FormData; handle
             value: data.code
           }
         });
-        setLastRfidFetch(true); // Sucesso
+        setLastRfidStatus('found'); // Sucesso
         
       } else {
-         // Código não recebido ou vazio
-         setLastRfidFetch(false); // Falha
+        // Chamada bem-sucedida, mas sem código. Continua buscando.
+        setLastRfidStatus('idle'); 
       }
     } catch (error) {
       console.error('Erro ao buscar UID:', error);
-      setLastRfidFetch(false); // Falha
+      // Se houver um erro de rede, define o status como erro temporário e continua o polling
+      setLastRfidStatus('error'); 
     } finally {
       setLoadingRfid(false);
     }
-  }, [handleChange]);
+  }, [handleChange, formData.codigoRFID]);
 
-  // Texto de placeholder dinâmico
-  const placeholderText = loadingRfid 
-    ? "Aguardando leitura no leitor..." 
-    : (formData.codigoRFID ? "Código obtido com sucesso." : "Clique no ícone para obter o código");
-
-  // Define o ícone de status e botão de ação
+  useEffect(() => {
+    // Se o código já foi encontrado, desativa o polling.
+    if (lastRfidStatus === 'found') return;
+    
+    // Inicia o polling automático a cada 2 segundos, como no seu código original.
+    const interval = setInterval(buscarUID, 2000); 
+    
+    // Limpa o intervalo
+    return () => clearInterval(interval);
+  }, [buscarUID, lastRfidStatus]);
+  
+  // Lógica de Placeholder e Icon de Status
   let iconStatus: React.ReactNode;
+  let placeholderText: string;
 
-  if (loadingRfid) {
-    iconStatus = (
-      <span className="text-yellow-600 animate-spin" title="A procurar...">
-        <i className="fas fa-spinner text-lg"></i>
-      </span>
-    );
-  } else if (formData.codigoRFID) {
-    iconStatus = (
-      <button 
-        type="button" 
-        onClick={buscarUID} 
-        className="text-green-600 hover:text-green-700 transition-colors duration-300"
-        title="Código obtido. Clique para buscar um novo."
-      >
-        <i className="fas fa-check-circle text-lg"></i>
-      </button>
-    );
-  } else if (lastRfidFetch === false) {
-    iconStatus = (
-      <button 
-        type="button" 
-        onClick={buscarUID} 
-        className="text-red-500 hover:text-red-600 transition-colors duration-300"
-        title="Falha na leitura. Tente novamente."
-      >
-        <i className="fas fa-exclamation-circle text-lg"></i>
-      </button>
-    );
+  if (lastRfidStatus === 'found') {
+    iconStatus = <i className="fas fa-check-circle text-lg text-green-600"></i>;
+    placeholderText = "Código obtido com sucesso! Você pode prosseguir.";
+  } else if (lastRfidStatus === 'searching') {
+    iconStatus = <i className="fas fa-spinner fa-spin text-lg text-blue-500"></i>;
+    placeholderText = "Aguardando leitura no leitor (polling automático)...";
+  } else if (lastRfidStatus === 'error') {
+     iconStatus = <i className="fas fa-exclamation-triangle text-lg text-red-500"></i>;
+     placeholderText = "Erro temporário na comunicação. Tentando novamente...";
   } else {
-     // Estado inicial ou após limpar
-     iconStatus = (
-      <button 
-        type="button" 
-        onClick={buscarUID} 
-        className="text-blue-500 hover:text-blue-600 transition-colors duration-300"
-        title="Obter Código RFID"
-      >
-        <i className="fas fa-wifi text-lg"></i>
-      </button>
-    );
+    iconStatus = <i className="fas fa-wifi text-lg text-gray-500"></i>;
+    placeholderText = "Passe o cartão no leitor. O sistema está a escutar (2s).";
   }
 
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mobile-compact-form">
-      {/* Campo RFID com Botão de Ação */}
+      {/* Campo RFID com Icon de Status */}
       <div className="relative">
         <InputGroup 
           id="codigoRFID" 
@@ -261,8 +237,8 @@ const Step3RFID = memo(({ formData, handleChange }: { formData: FormData; handle
           onChange={handleChange} 
           placeholder={placeholderText} 
           isFullWidth={true} 
-          // O campo fica desabilitado para leitura manual
-          disabled={true} 
+          // Desabilitado para que apenas o sistema preencha o valor
+          disabled={lastRfidStatus === 'found'} 
         />
         <div className="absolute top-0 right-0 mt-8 mr-3 z-20">
           {iconStatus}
@@ -457,7 +433,6 @@ export default function Signup() {
     for (const field of currentStepFields) {
       if (field === "fotoPerfil") continue;
       
-      // Validação especial para Step 3: RFID é obrigatório
       if (!formData[field]) {
         setError(`Campo obrigatório não preenchido: ${getFieldLabel(field)}`);
         return false;
@@ -527,13 +502,6 @@ export default function Signup() {
       setIsSubmitting(false);
       return;
     }
-    
-    if (!formData.codigoRFID) {
-      setError("O Código RFID é obrigatório. Por favor, clique no ícone para obter o código do seu cartão.");
-      setIsSubmitting(false);
-      return;
-    }
-
 
     try {
       const estagiarioPayload: Record<string, any> = {
@@ -550,13 +518,11 @@ export default function Signup() {
         area_de_estagio: formData.areaEstagio,
         codigo_rfid: formData.codigoRFID,
         data_inicio_estado: formData.dataInicio,
-        // O id_professor pode precisar de lógica para ser obtido dinamicamente
-        id_professor: null, 
+        id_professor: null,
         password: formData.senha,
         foto: formData.fotoPerfil || null
       };
 
-      // Usa a instância 'api' para enviar os dados
       await api.post("/estagiarios", estagiarioPayload);
 
       setSuccess("Cadastro concluído com sucesso! Redirecionando para o Login...");
@@ -564,8 +530,7 @@ export default function Signup() {
     } catch (err: any) {
       console.error(err);
       const message = err?.response?.data?.error || err?.response?.data?.message || err.message || "Erro ao processar cadastro.";
-      // Tenta formatar a mensagem de erro da API
-      setError(typeof message === 'object' ? JSON.stringify(message) : String(message));
+      setError(String(message));
     } finally {
       setIsSubmitting(false);
     }
@@ -623,7 +588,6 @@ export default function Signup() {
   );
 
   const renderStep3 = () => (
-    // Componente Step3RFID modificado para leitura manual
     <Step3RFID formData={formData} handleChange={handleChange} />
   );
 
