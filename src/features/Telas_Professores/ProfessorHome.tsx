@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion'; // Importação essencial para animações avançadas
 import {
   Users,
@@ -12,8 +12,8 @@ import {
   PieChart,
   AlertTriangle,
   FileWarning,
-  LucideIcon,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 // === TIPAGEM ===
 
@@ -34,73 +34,13 @@ interface Notification {
     color: string;
 }
 
-// === DADOS MOCKADOS ===
+// Estado dinâmico: vamos buscar do backend via `api.ts`
+import api from '../../api';
 
-const mockData = {
-  professorName: "Dra. Ana Paula Silva",
-  indicators: [
-    {
-      title: "Total de Estagiários Supervisionados",
-      value: 15,
-      description: "Estudantes ativos sob sua orientação.",
-      Icon: Users,
-      color: "border-sky-600",
-      action: "Ver Lista",
-      link: "/estagiarios"
-    },
-    {
-      title: "Estágios em Andamento",
-      value: 11,
-      description: "Estágios em fase de execução.",
-      Icon: PlayCircle,
-      color: "border-green-600",
-      action: "Gerir Ativos",
-      link: "/estagiarios/ativos"
-    },
-    {
-      title: "Estágios Pendentes",
-      value: 2,
-      description: "Aguardando aprovação inicial ou documentação.",
-      Icon: Clock,
-      color: "border-amber-500",
-      action: "Revisar",
-      link: "/estagiarios/pendentes"
-    },
-    {
-      title: "Estágios Concluídos",
-      value: 2,
-      description: "Estágios finalizados no último trimestre.",
-      Icon: CheckCircle,
-      color: "border-indigo-600",
-      action: "Ver Histórico",
-      link: "/estagiarios/historico"
-    },
-    {
-      title: "Relatórios Aguardando Revisão",
-      value: 7,
-      description: "Relatórios submetidos, precisam de sua análise.",
-      Icon: FileText,
-      color: "border-red-600",
-      action: "Avaliar",
-      link: "/relatorios/revisao"
-    },
-    {
-      title: "Empréstimos Ativos de Materiais",
-      value: 4,
-      description: "Materiais sob responsabilidade dos estagiários.",
-      Icon: Package,
-      color: "border-blue-800",
-      action: "Gerir Empréstimos",
-      link: "/materiais/emprestimos"
-    },
-  ] as StatCardProps[],
-  notifications: [
-    { type: "Relatório", message: "Relatório semanal de João Silva está **vencido**.", icon: FileWarning, color: "text-red-500" },
-    { type: "Presença", message: "Alerta: Maria Souza **faltou** ao laboratório hoje.", icon: AlertTriangle, color: "text-amber-500" },
-    { type: "Material", message: "O microscópio M-4 foi **devolvido** por Pedro Alvares.", icon: CheckCircle, color: "text-green-500" },
-    { type: "Relatório", message: "Novo relatório de Bruna Lima aguardando revisão.", icon: FileText, color: "text-sky-500" },
-  ] as Notification[]
-};
+// Estado inicial simples — os dados reais chegam via chamadas HTTP
+const initialIndicators: StatCardProps[] = [];
+
+const initialNotifications: Notification[] = [];
 
 // Componente Card com Animações (motion.a)
 const StatCard: React.FC<StatCardProps> = ({ 
@@ -181,7 +121,101 @@ const itemVariants = {
 
 // Componente principal da Home
 export default function ProfessorHome() {
-  const { professorName, indicators, notifications } = mockData;
+  const [professorName, setProfessorName] = useState<string>('Carregando...');
+  const [indicators, setIndicators] = useState<StatCardProps[]>(initialIndicators);
+  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadData() {
+      setLoading(true);
+      setError(null);
+      try {
+        // 1) Buscar professor (usa primeiro professor disponível como demo)
+        const profRes = await api.get('/professores');
+        if (!mounted) return;
+        const profData = Array.isArray(profRes.data) && profRes.data.length ? profRes.data[0] : null;
+        if (profData) setProfessorName(profData.nome || profData.username || 'Professor');
+
+        // 2) Buscar dashboard (totais)
+        const dashRes = await api.get('/dashboard');
+        const dash = dashRes.data || {};
+
+        // 3) Buscar relatórios para montar notificações básicas
+        const relRes = await api.get('/relatorios');
+        const rels = Array.isArray(relRes.data) ? relRes.data : [];
+
+        // Monta indicadores a partir dos dados do backend
+        const newIndicators: StatCardProps[] = [
+          {
+            title: 'Total de Estagiários Supervisionados',
+            value: Number(dash.total_estagiarios || 0),
+            description: 'Estudantes ativos sob sua orientação.',
+            Icon: Users,
+            color: 'border-sky-600',
+            action: 'Ver Lista',
+            link: '/estagiarios'
+          },
+          {
+            title: 'Empréstimos Ativos',
+            value: Number(dash.emprestimos_abertos || 0),
+            description: 'Materiais atualmente emprestados.',
+            Icon: Package,
+            color: 'border-blue-800',
+            action: 'Gerir Empréstimos',
+            link: '/materiais/emprestimos'
+          },
+          {
+            title: 'Total de Materiais',
+            value: Number(dash.total_materiais || 0),
+            description: 'Itens catalogados no inventário.',
+            Icon: PlayCircle,
+            color: 'border-green-600',
+            action: 'Ver Materiais',
+            link: '/materiais'
+          },
+          // Complementamos com indicadores derivados localmente (ex.: relatórios pendentes)
+          {
+            title: 'Relatórios Aguardando Revisão',
+            value: rels.length,
+            description: 'Relatórios submetidos, precisam de sua análise.',
+            Icon: FileText,
+            color: 'border-red-600',
+            action: 'Avaliar',
+            link: '/relatorios'
+          }
+        ];
+
+        // Monta notificações com os relatórios mais recentes
+        const newNotifications: Notification[] = rels.slice(0, 6).map((r: any) => ({
+          type: 'Relatório',
+          message: `Relatório: ${r.titulo || 'Sem título'} — ${r.conteudo ? String(r.conteudo).slice(0, 80) + '...' : ''}`,
+          icon: FileText,
+          color: 'text-sky-500'
+        }));
+
+        if (!mounted) return;
+        setIndicators(newIndicators);
+        setNotifications(newNotifications);
+      } catch (err: any) {
+        console.error('Erro ao carregar dados do ProfessorHome', err);
+        console.error('Resposta do servidor:', err?.response?.data ?? err?.response);
+        if (!mounted) return;
+        const serverMsg = err?.response?.data?.error || err?.response?.data?.message || err?.response?.data || null;
+        setError(serverMsg ? String(serverMsg) : (err?.message || 'Erro desconhecido'));
+      } finally {
+        if (!mounted) return;
+        setLoading(false);
+      }
+    }
+
+    loadData();
+
+    return () => { mounted = false; };
+  }, []);
 
   return (
     // Usa motion.div para a animação de entrada geral (Fade-in Up)
@@ -221,11 +255,15 @@ export default function ProfessorHome() {
           <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b pb-2 border-gray-200 dark:border-gray-700">Resumo Geral</h2>
           
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {indicators.map((indicator, index) => (
-              <motion.div key={index} variants={itemVariants}>
-                <StatCard {...indicator} />
-              </motion.div>
-            ))}
+            {loading ? (
+              <div className="text-gray-500">Carregando indicadores...</div>
+            ) : (
+              indicators.map((indicator, index) => (
+                <motion.div key={index} variants={itemVariants}>
+                  <StatCard {...indicator} />
+                </motion.div>
+              ))
+            )}
           </div>
         </motion.section>
 
@@ -278,20 +316,24 @@ export default function ProfessorHome() {
           >
             <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b pb-2 border-gray-700">Alertas e Ações Pendentes</h2>
             <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-lg space-y-4">
-              {notifications.map((notif, index) => (
-                <motion.div 
-                  key={index} 
-                  className="flex items-start space-x-3 pb-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 last:pb-0 
-                             transition duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 p-2 -m-2 rounded-lg cursor-pointer"
-                  whileHover={{ x: 5 }} // Efeito de deslizamento no hover
-                >
-                  <notif.icon className={`w-5 h-5 flex-shrink-0 mt-1 ${notif.color}`} />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{notif.type}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400" dangerouslySetInnerHTML={{ __html: notif.message.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}></p>
-                  </div>
-                </motion.div>
-              ))}
+              {loading ? (
+                <div className="text-sm text-gray-500">Carregando notificações...</div>
+              ) : (
+                notifications.map((notif, index) => (
+                  <motion.div 
+                    key={index} 
+                    className="flex items-start space-x-3 pb-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 last:pb-0 
+                               transition duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 p-2 -m-2 rounded-lg cursor-pointer"
+                    whileHover={{ x: 5 }} // Efeito de deslizamento no hover
+                  >
+                    <notif.icon className={`w-5 h-5 flex-shrink-0 mt-1 ${notif.color}`} />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{notif.type}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{notif.message}</p>
+                    </div>
+                  </motion.div>
+                ))
+              )}
               <div className="pt-2">
                 <a href="/notificacoes" className="text-sm font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition duration-150">
                   Ver todas as notificações

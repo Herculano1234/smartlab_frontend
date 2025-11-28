@@ -15,6 +15,9 @@ import {
   Upload,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import api from '../../api';
+import { useToast } from '../../components/ToastContext';
+import { useParams } from 'react-router-dom';
 
 // --- Tipagem e Dados Mockados ---
 
@@ -25,21 +28,21 @@ interface ProfessorData {
   telefone: string;
   cargo: string;
   departamento: string;
-  foto_perfil: string;
-  data_cadastro: string;
-  ultimo_acesso: string;
+  foto_perfil?: string | null;
+  data_cadastro?: string | null;
+  ultimo_acesso?: string | null;
 }
 
-const mockProfessor: ProfessorData = {
-  id: 101,
-  nome_completo: "Dr. Roberto Silva Santos",
-  email_institucional: "roberto.santos@smartlab.edu",
-  telefone: "(11) 98765-4321",
-  cargo: "Professor Doutor",
-  departamento: "Engenharia de Software",
-  foto_perfil: '/public/professor-avatar.jpg', // Caminho fictício
-  data_cadastro: "2018-03-15",
-  ultimo_acesso: "2024-05-16 10:30:00",
+const emptyProfessor: ProfessorData = {
+  id: 0,
+  nome_completo: '',
+  email_institucional: '',
+  telefone: '',
+  cargo: '',
+  departamento: '',
+  foto_perfil: null,
+  data_cadastro: null,
+  ultimo_acesso: null,
 };
 
 // --- Componente de Feedback ---
@@ -61,51 +64,203 @@ const FeedbackMessage: React.FC<{ message: string; type: 'success' | 'error' }> 
 // --- Componente Principal ---
 
 export default function PerfilProfPage() {
-  const [user, setUser] = useState<ProfessorData>(mockProfessor);
+  const { id: routeId } = useParams();
+  const toast = useToast();
+
+  const [user, setUser] = useState<ProfessorData>(emptyProfessor);
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<ProfessorData>(mockProfessor);
+  const [formData, setFormData] = useState<ProfessorData>(emptyProfessor);
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Inicializa o formData com os dados do usuário
+  // helper: read file as data URL for foto upload
+  const readFileAsDataURL = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+
+  const getDataUrlSizeBytes = (dataUrl: string) => {
+    // data:[<mediatype>][;base64],<data>
+    const base64 = dataUrl.split(',')[1] || '';
+    // approximate byte size
+    const padding = (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
+    return (base64.length * 3) / 4 - padding;
+  };
+
+  const compressDataUrl = (dataUrl: string, maxWidth = 800, quality = 0.7): Promise<string> => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = img.width / img.height || 1;
+      const width = Math.min(img.width, maxWidth);
+      const height = Math.round(width / ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error('Canvas not supported'));
+      ctx.drawImage(img, 0, 0, width, height);
+      const out = canvas.toDataURL('image/jpeg', quality);
+      resolve(out);
+    };
+    img.onerror = (e) => reject(e);
+    img.src = dataUrl;
+  });
+
+  // initialize form when user changes
+  useEffect(() => { setFormData(user); }, [user]);
+
+  // Load profile from backend (route param id or first professor)
   useEffect(() => {
-    setFormData(user);
-  }, [user]);
+    async function loadProfile() {
+      try {
+        if (routeId) {
+          const res = await api.get(`/professores/${encodeURIComponent(routeId)}`);
+          const row = res.data;
+          setUser({
+            id: Number(row.id),
+            nome_completo: row.nome || '',
+            email_institucional: row.email || '',
+            telefone: row.telefone || '',
+            cargo: row.cargo_instituicao || '',
+            departamento: row.disciplina || '',
+            foto_perfil: row.foto || null,
+            data_cadastro: row.created_at || null,
+            ultimo_acesso: null,
+          });
+        } else {
+          const res = await api.get('/professores');
+          const rows = Array.isArray(res.data) ? res.data : [];
+          if (rows.length) {
+            const row = rows[0];
+            setUser({
+              id: Number(row.id),
+              nome_completo: row.nome || '',
+              email_institucional: row.email || '',
+              telefone: row.telefone || '',
+              cargo: row.cargo_instituicao || '',
+              departamento: row.disciplina || '',
+              foto_perfil: row.foto || null,
+              data_cadastro: row.created_at || null,
+              ultimo_acesso: null,
+            });
+          }
+        }
+      } catch (err:any) {
+        console.error('Erro ao carregar perfil', err);
+        try { toast.showToast('Erro ao carregar perfil: ' + (err?.response?.data?.error || err?.message || ''), 'error'); } catch(e){}
+      }
+    }
+    loadProfile();
+  }, [routeId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData({ ...formData, [e.target.name]: e.target.value } as any);
+  };
+
+  const handlePhotoFile = async (file?: File) => {
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataURL(file);
+      // if image is large, try compressing before storing/sending
+      const size = getDataUrlSizeBytes(dataUrl);
+      const MAX_BYTES = 200 * 1024; // 200KB
+      let finalDataUrl = dataUrl;
+      if (size > MAX_BYTES) {
+        try {
+          const compressed = await compressDataUrl(dataUrl, 800, 0.7);
+          const newSize = getDataUrlSizeBytes(compressed);
+          if (newSize < size) finalDataUrl = compressed;
+        } catch (err) {
+          console.warn('Compress failed, keeping original', err);
+        }
+      }
+      setFormData(s => ({ ...(s||{}), foto_perfil: finalDataUrl } as ProfessorData));
+    } catch (err) {
+      console.error('Erro ao ler foto', err);
+      try { toast.showToast('Erro ao processar imagem', 'error'); } catch(e){}
+    }
   };
 
   const handleSave = useCallback(() => {
-    // Simulação de validação
     if (!formData.nome_completo || !formData.telefone) {
       setFeedback({ message: "Por favor, preencha todos os campos obrigatórios.", type: 'error' });
       return;
     }
+    (async () => {
+      try {
+        const payload:any = {
+          nome: formData.nome_completo,
+          telefone: formData.telefone,
+          cargo_instituicao: formData.cargo,
+          disciplina: formData.departamento,
+        };
+        // Attach fotoPerfil, compressing iteratively if necessary to avoid server 413
+        if (formData.foto_perfil) {
+          let finalData = formData.foto_perfil;
+          let size = getDataUrlSizeBytes(finalData);
+          const LIMIT = 300 * 1024; // 300 KB safe limit for Vercel JSON body
+          if (size > LIMIT) {
+            // try compressing with decreasing quality and widths
+            const attempts = [ {w:800,q:0.6}, {w:600,q:0.5}, {w:500,q:0.45}, {w:400,q:0.4} ];
+            for (const a of attempts) {
+              try {
+                const compressed = await compressDataUrl(finalData, a.w, a.q);
+                const newSize = getDataUrlSizeBytes(compressed);
+                if (newSize < size) {
+                  finalData = compressed;
+                  size = newSize;
+                }
+                if (size <= LIMIT) break;
+              } catch (err) {
+                console.warn('compress attempt failed', err);
+              }
+            }
+          }
+          if (size > LIMIT) {
+            try { toast.showToast('A imagem continua muito grande após tentativa de compressão. Escolha uma imagem menor.', 'error'); } catch(e){}
+            return;
+          }
+          // send as `foto` because backend PUT /professores does not map fotoPerfil -> foto
+          payload.foto = finalData;
+        }
+        const id = formData.id || user.id;
+        if (!id) throw new Error('ID do professor não disponível');
+        const res = await api.put(`/professores/${encodeURIComponent(id)}`, payload);
+        const row = res.data;
+        setUser({
+          id: Number(row.id),
+          nome_completo: row.nome || '',
+          email_institucional: row.email || '',
+          telefone: row.telefone || '',
+          cargo: row.cargo_instituicao || '',
+          departamento: row.disciplina || '',
+          foto_perfil: row.foto || null,
+          data_cadastro: row.created_at || null,
+          ultimo_acesso: null,
+        });
+        setIsEditing(false);
+        try { toast.showToast('Perfil atualizado com sucesso!', 'success'); } catch(e){}
+        setTimeout(() => setFeedback(null), 3000);
+      } catch (err:any) {
+        console.error('Erro ao salvar perfil', err);
+        setFeedback({ message: 'Erro ao salvar perfil: ' + (err?.response?.data?.error || err?.message || ''), type: 'error' });
+        try { toast.showToast('Erro ao salvar perfil: ' + (err?.response?.data?.error || err?.message || ''), 'error'); } catch(e){}
+      }
+    })();
+  }, [formData, user]);
 
-    // Simulação de chamada de API para salvar
-    setTimeout(() => {
-      setUser(formData); // Atualiza o estado principal
-      setIsEditing(false); // Sai do modo de edição
-      setFeedback({ message: "Perfil atualizado com sucesso!", type: 'success' });
-      
-      // Limpa a mensagem de feedback após 3 segundos
-      setTimeout(() => setFeedback(null), 3000);
-    }, 500);
-  }, [formData]);
-  
   const handleCancel = useCallback(() => {
     setIsEditing(false);
-    setFormData(user); // Restaura os dados originais
+    setFormData(user);
     setFeedback(null);
   }, [user]);
 
-  // Função para simular atualização da foto de perfil
   const handleUpdatePhoto = () => {
-    setFeedback({ message: "Simulação: Abrir modal para upload de nova foto.", type: 'success' });
-    setTimeout(() => setFeedback(null), 3000);
+    setIsEditing(true);
+    try { toast.showToast('Selecione uma nova foto abaixo para atualizar o perfil', 'info'); } catch(e){}
   };
 
-  // Função para simular alteração de senha
   const handleChangePassword = () => {
     setFeedback({ message: "Simulação: Redirecionar para tela de Alteração de Senha.", type: 'success' });
     setTimeout(() => setFeedback(null), 3000);
@@ -153,7 +308,7 @@ export default function PerfilProfPage() {
         <div className="flex flex-col sm:flex-row items-center gap-8 border-b pb-6 mb-6 dark:border-gray-700">
           <div className="relative">
             <img 
-              src={user.foto_perfil || '/public/avatar-placeholder.png'} 
+              src={(isEditing ? formData.foto_perfil : user.foto_perfil) || '/public/avatar-placeholder.png'} 
               alt="Foto de Perfil" 
               className="w-32 h-32 rounded-full object-cover border-4 border-sky-500 shadow-md" 
             />
@@ -166,6 +321,11 @@ export default function PerfilProfPage() {
             >
               <Camera className="w-5 h-5" />
             </motion.button>
+            {isEditing && (
+              <div className="mt-2">
+                <input type="file" accept="image/*" onChange={(e)=> handlePhotoFile(e.currentTarget.files?.[0])} />
+              </div>
+            )}
           </div>
 
           <div className="text-center sm:text-left">
@@ -212,7 +372,7 @@ export default function PerfilProfPage() {
             icon={<Calendar className="w-4 h-4" />}
             label="Data de Cadastro"
             name="data_cadastro"
-            value={new Date(user.data_cadastro).toLocaleDateString()}
+            value={user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString() : '-'}
             editable={false}
           />
         </div>
@@ -221,7 +381,7 @@ export default function PerfilProfPage() {
         <div className="mt-6 pt-4 border-t dark:border-gray-700">
             <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
                 <Calendar className="w-4 h-4"/>
-                <span>Último acesso: {new Date(user.ultimo_acesso).toLocaleString()}</span>
+                <span>Último acesso: {user.ultimo_acesso ? new Date(user.ultimo_acesso).toLocaleString() : '-'}</span>
             </div>
         </div>
 

@@ -100,6 +100,7 @@ interface InputGroupProps {
   required?: boolean;
   isFullWidth?: boolean;
   children?: React.ReactNode;
+  readOnly?: boolean; // Adicionado para RFID
 }
 
 const stepsConfig = [
@@ -120,7 +121,8 @@ const InputGroup = memo(({
   placeholder, 
   required = true, 
   isFullWidth = false, 
-  children 
+  children,
+  readOnly = false // Default
 }: InputGroupProps) => {
   const InputStyle = "w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none bg-white transition-colors duration-300 placeholder-gray-400 shadow-sm";
   
@@ -154,9 +156,10 @@ const InputGroup = memo(({
           id={id}
           value={value}
           onChange={onChange}
-          className={`${InputStyle} pt-6`}
+          className={`${InputStyle} pt-6 ${readOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`} // Estilo para readonly
           placeholder={placeholder}
           required={required}
+          readOnly={readOnly} // Propriedade readOnly
         />
       )}
     </div>
@@ -192,6 +195,7 @@ export default function Signup() {
   const [success, setSuccess] = useState("");
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReadingRFID, setIsReadingRFID] = useState(false); // NOVO: Estado para leitura de RFID
   const navigate = useNavigate();
 
   // useCallback para evitar re-renderizações desnecessárias
@@ -274,6 +278,45 @@ export default function Signup() {
     }
   }, []);
 
+  // -------------------------------------------------------------
+  // FUNÇÃO: Capturar Código RFID (NOVA)
+  // -------------------------------------------------------------
+  const handleReadRFID = useCallback(async () => {
+    setError("");
+    setIsReadingRFID(true);
+    
+    // Salva o valor atual para restaurar em caso de erro
+    const initialPlaceholder = formData.codigoRFID;
+    // Feedback visual que a leitura está em curso
+    setFormData(prev => ({ ...prev, codigoRFID: "Aguardando leitura do cartão..." }));
+
+    try {
+      // Chamada ao endpoint do backend para ler o RFID
+      // O backend deve manter esta requisição aberta ou usar WebSockets
+      // para esperar o cartão ser passado no leitor.
+      const response = await api.get("/rfid");
+      
+      const rfidCode = response.data?.codigo || response.data?.rfid_code;
+
+      if (rfidCode) {
+        // Atualiza o formData com o código retornado
+        setFormData(prev => ({ ...prev, codigoRFID: String(rfidCode) }));
+        setSuccess("Código RFID capturado com sucesso!");
+        setTimeout(() => setSuccess(""), 3000); 
+      } else {
+        throw new Error("Resposta inválida do leitor RFID.");
+      }
+    } catch (err: any) {
+      const message = err?.response?.data?.error || err.message || "Falha ao comunicar com o leitor RFID.";
+      setError(String(message));
+      // Restaura o valor anterior (ou vazio) em caso de erro
+      setFormData(prev => ({ ...prev, codigoRFID: initialPlaceholder })); 
+    } finally {
+      setIsReadingRFID(false);
+    }
+  }, [formData.codigoRFID]);
+
+
   const stepFieldsMap: Record<number, (keyof FormData)[]> = {
     1: ["fotoPerfil", "nome", "processoOuBI", "dataNascimento", "sexo", "email", "telefone", "morada"],
     2: ["escolaOrigem", "curso", "ano", "turma", "areaEstagio"],
@@ -286,11 +329,13 @@ export default function Signup() {
     for (const field of currentStepFields) {
       if (field === "fotoPerfil") continue;
       
+      // Validação obrigatória
       if (!formData[field]) {
         setError(`Campo obrigatório não preenchido: ${getFieldLabel(field)}`);
         return false;
       }
       
+      // Validações específicas
       if (field === "email" && !isValidEmail(formData.email)) {
         setError("Por favor, insira um email válido.");
         return false;
@@ -334,6 +379,7 @@ export default function Signup() {
   }, []);
 
   const isValidPhone = useCallback((phone: string): boolean => {
+    // Regex para Angola (+244 9XX XXX XXX) ou apenas 9XX XXX XXX
     return /^[\+]?[244]?[\s]?9\d{2}[\s]?\d{3}[\s]?\d{3}$/.test(phone.replace(/\s/g, ''));
   }, []);
 
@@ -479,16 +525,61 @@ export default function Signup() {
     </div>
   ), [formData, handleChange]);
 
-  // Renderização do Passo 3
+  // Renderização do Passo 3 (MODIFICADO para incluir o botão RFID)
   const renderStep3 = useCallback(() => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mobile-compact-form">
-      <InputGroup id="codigoRFID" label="Código RFID" value={formData.codigoRFID} onChange={handleChange} placeholder="Passe o cartão no leitor" isFullWidth={true} />
+      
+      {/* CAMPO DO CÓDIGO RFID COM BOTÃO DE LEITURA (MODIFICADO) */}
+      <div className={`form-group relative md:col-span-2`}>
+        <label htmlFor="codigoRFID" className="input-label absolute top-2 left-4 text-xs font-medium text-gray-600 transition-all duration-200 transform">
+          Código RFID <span className="text-red-400">*</span>
+        </label>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            id="codigoRFID"
+            value={formData.codigoRFID}
+            onChange={handleChange}
+            // Torna o campo somente leitura se estiver lendo ou se já tiver um código
+            readOnly={isReadingRFID || (formData.codigoRFID !== "" && formData.codigoRFID !== "Aguardando leitura do cartão...")} 
+            className={`flex-grow w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none bg-white transition-colors duration-300 placeholder-gray-400 shadow-sm pt-6 ${
+                (isReadingRFID || formData.codigoRFID !== "") ? 'bg-gray-100 cursor-not-allowed' : ''
+            }`}
+            placeholder="Passe o cartão no leitor"
+            required={true}
+          />
+          <button
+            type="button"
+            onClick={handleReadRFID}
+            disabled={isReadingRFID}
+            className={`w-fit px-4 py-3 rounded-xl font-semibold text-white transition-all duration-300 shadow-md flex items-center justify-center whitespace-nowrap ${
+              isReadingRFID 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-blue-500 hover:bg-blue-600'
+            }`}
+          >
+            {isReadingRFID ? (
+              <i className="fas fa-spinner fa-spin mr-1"></i>
+            ) : (
+              <i className="fas fa-satellite-dish mr-1"></i>
+            )}
+            {isReadingRFID ? "Lendo..." : "Ler Cartão"}
+          </button>
+        </div>
+        {/* Mensagem de instrução adicional */}
+        {!formData.codigoRFID || formData.codigoRFID === "Aguardando leitura do cartão..." ? (
+          <p className="mt-2 text-xs text-gray-500">Clique em "Ler Cartão" e aproxime o cartão RFID do leitor.</p>
+        ) : (
+           <p className="mt-2 text-xs text-green-600 font-medium">Código capturado! Você pode prosseguir.</p>
+        )}
+      </div>
+
       <InputGroup id="dataInicio" label="Data de Início do Estágio" type="date" value={formData.dataInicio} onChange={handleChange} />
       <InputGroup id="supervisor" label="Supervisor Responsável" value={formData.supervisor} onChange={handleChange} placeholder="Nome do Professor" />
       <InputGroup id="senha" label="Senha" type="password" value={formData.senha} onChange={handleChange} placeholder="Mínimo 6 caracteres" />
       <InputGroup id="confirmarSenha" label="Confirmar Senha" type="password" value={formData.confirmarSenha} onChange={handleChange} placeholder="Repita a senha" />
     </div>
-  ), [formData, handleChange]);
+  ), [formData, handleChange, handleReadRFID, isReadingRFID]);
   
   // Renderização do Formulário Atual
   const renderCurrentStep = useCallback(() => {

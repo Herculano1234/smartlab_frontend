@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import api from '../../api';
 
 export default function PerfilPage() {
   const [estagiario, setEstagiario] = useState<any>(null);
@@ -9,12 +10,12 @@ export default function PerfilPage() {
       try { setEstagiario(JSON.parse(raw)); return; } catch {}
     }
     // else try to fetch from API
-    fetch('/api/estagiarios')
-      .then(r => r.json())
+    api.get('/estagiarios')
+      .then(res => res.data)
       .then(rows => {
         const perfil = localStorage.getItem('smartlab-user-id') || localStorage.getItem('smartlab-user');
-        if (!perfil) { setEstagiario(rows[0] || null); return; }
-        const found = rows.find((r:any) => r.user_id === perfil || r.id === perfil);
+        if (!perfil) { setEstagiario(Array.isArray(rows) ? rows[0] || null : null); return; }
+        const found = Array.isArray(rows) ? rows.find((r:any) => r.user_id === perfil || String(r.id) === String(perfil)) : null;
         setEstagiario(found || null);
       })
       .catch(() => setEstagiario(null));

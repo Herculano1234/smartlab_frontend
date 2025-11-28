@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -10,13 +10,16 @@ import {
   FileText,
   Calendar,
   Monitor,
-  LucideIcon,
   ChevronsLeft,
   ChevronsRight,
   Clock,
   CheckCircle,
   XCircle,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+import api from '../../api';
+import { useNavigate } from 'react-router-dom';
 
 // === TIPAGEM E DADOS MOCKADOS ===
 
@@ -42,20 +45,7 @@ const statusColors: Record<EstagioStatus, { color: string, Icon: LucideIcon }> =
     'Suspenso': { color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900', Icon: XCircle }, // Vermelho
 };
 
-const mockEstagiarios: Estagiario[] = [
-    { id: 101, nome: "João Pedro Alves", processo: "2022010", curso: "Eng. Elétrica", turma: "ELET A", area: "Automação", status: 'Em Andamento', frequencia: 95, email: "joao.alves@uni.br" },
-    { id: 102, nome: "Maria Luisa Costa", processo: "2023055", curso: "Ciência da Computação", turma: "COMP B", area: "Desenvolvimento Web", status: 'Pendente', frequencia: 0, email: "maria.costa@uni.br" },
-    { id: 103, nome: "Carlos Henrique Souza", processo: "2021003", curso: "Eng. Mecânica", turma: "MEC C", area: "Desenho Industrial", status: 'Concluído', frequencia: 100, email: "carlos.souza@uni.br" },
-    { id: 104, nome: "Bruna Lima Ferreira", processo: "2022021", curso: "Eng. Elétrica", turma: "ELET A", area: "Sistemas de Potência", status: 'Em Andamento', frequencia: 88, email: "bruna.ferreira@uni.br" },
-    { id: 105, nome: "Pedro Rocha Santos", processo: "2023015", curso: "Ciência da Computação", turma: "COMP B", area: "Segurança de Dados", status: 'Em Andamento', frequencia: 75, email: "pedro.santos@uni.br" },
-    { id: 106, nome: "Mariana Guedes", processo: "2023016", curso: "Eng. Elétrica", turma: "ELET B", area: "Robótica", status: 'Suspenso', frequencia: 40, email: "mariana.guedes@uni.br" },
-    { id: 107, nome: "Ricardo Torres", processo: "2021045", curso: "Eng. Elétrica", turma: "ELET A", area: "Geração de Energia", status: 'Em Andamento', frequencia: 92, email: "ricardo.torres@uni.br" },
-    { id: 108, nome: "Paula Mendes", processo: "2020088", curso: "Eng. Mecânica", turma: "MEC C", area: "Manutenção Preditiva", status: 'Concluído', frequencia: 100, email: "paula.mendes@uni.br" },
-];
-
-// Opções para Filtros
-const availableCursos = Array.from(new Set(mockEstagiarios.map(e => e.curso)));
-const availableTurmas = Array.from(new Set(mockEstagiarios.map(e => e.turma)));
+// We'll fetch estagiários from the backend and derive filter options dynamically
 const availableStatus = Object.keys(statusColors) as EstagioStatus[];
 
 
@@ -90,12 +80,13 @@ const itemVariants = {
 };
 
 // Componente de Linha da Tabela Otimizado para Mobile
-const TableRowMobileOptimized: React.FC<{ e: Estagiario }> = ({ e }) => (
+const TableRowMobileOptimized: React.FC<{ e: Estagiario; onOpen: (id: number) => void; onOpenRel?: (id:number)=>void; onOpenPres?: (id:number)=>void }> = ({ e, onOpen, onOpenRel, onOpenPres }) => (
     // Usa TR como um 'cartão' no mobile
     <motion.tr 
         key={e.id} 
         className="hover:bg-gray-50 dark:hover:bg-gray-700 transition duration-150 cursor-pointer border-b dark:border-gray-700"
         whileHover={{ scale: 1.01, boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
+    onClick={() => onOpen(e.id)}
     >
         <td className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
             {/* Bloco de Informações do Estagiário */}
@@ -135,9 +126,9 @@ const TableRowMobileOptimized: React.FC<{ e: Estagiario }> = ({ e }) => (
                 </div>
 
                 {/* Botões de Ação */}
-                <motion.button title="Ver Perfil" className="p-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition" whileHover={{ scale: 1.15 }}><User className="w-5 h-5" /></motion.button>
-                <motion.button title="Ver Relatórios" className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 transition" whileHover={{ scale: 1.15 }}><FileText className="w-5 h-5" /></motion.button>
-                <motion.button title="Ver Presenças" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }}><CalendarCheck className="w-5 h-5" /></motion.button>
+        <motion.button title="Ver Perfil" className="p-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); onOpen(e.id); }}><User className="w-5 h-5" /></motion.button>
+        <motion.button title="Ver Relatórios" className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); onOpenRel?.(e.id); }}><FileText className="w-5 h-5" /></motion.button>
+        <motion.button title="Ver Presenças" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); onOpenPres?.(e.id); }}><CalendarCheck className="w-5 h-5" /></motion.button>
             </div>
         </td>
     </motion.tr>
@@ -154,12 +145,76 @@ export default function EstagiariosProfPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5; 
 
-  // Lógica de Filtragem e Busca (inalterada)
+  const [estagiarios, setEstagiarios] = useState<Estagiario[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  // Navigation helpers
+  const openPerfil = (id: number) => {
+    navigate(`/professor/estagiarios/${id}`);
+  };
+
+  const openRelatorios = (id: number) => {
+    navigate(`/professor/relatorios?estagiarioId=${id}`);
+  };
+
+  const openPresencas = (id: number) => {
+    navigate(`/professor/presencas?estagiarioId=${id}`);
+  };
+
+  // Normalize status value from backend to our union
+  const normalizeStatus = (s: any): EstagioStatus => {
+    if (!s) return 'Pendente';
+    const t = String(s).toLowerCase();
+    if (t.includes('concl')) return 'Concluído';
+    if (t.includes('susp')) return 'Suspenso';
+    if (t.includes('and') || t.includes('andamento') || t.includes('em andamento')) return 'Em Andamento';
+    return 'Pendente';
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await api.get('/estagiarios');
+        if (!mounted) return;
+        const rows = Array.isArray(res.data) ? res.data : [];
+        const normalized: Estagiario[] = rows.map((r: any) => ({
+          id: r.id,
+          nome: r.nome || r.nome_completo || 'Sem nome',
+          processo: r.numero_processo || r.processo || r.numero || '',
+          curso: r.curso || r.departamento || '—',
+          turma: r.turma || '—',
+          area: r.area_de_estagio || r.area || '—',
+          status: normalizeStatus(r.estado_estagio || r.estado || r.status),
+          frequencia: r.frequencia !== undefined ? Number(r.frequencia) : 0,
+          email: r.email || ''
+        }));
+        setEstagiarios(normalized);
+      } catch (err: any) {
+        console.error('Erro ao buscar estagiarios', err);
+        setError(err?.response?.data?.error || err?.message || 'Erro ao carregar estagiários');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, []);
+
+  // Derive filter options from fetched data
+  const availableCursos = useMemo(() => Array.from(new Set(estagiarios.map(e => e.curso).filter(Boolean))), [estagiarios]);
+  const availableTurmas = useMemo(() => Array.from(new Set(estagiarios.map(e => e.turma).filter(Boolean))), [estagiarios]);
+
+  // Lógica de Filtragem e Busca
   const filteredEstagiarios = useMemo(() => {
-    return mockEstagiarios.filter(estagiario => {
+    return estagiarios.filter(estagiario => {
       const matchesSearch = 
         estagiario.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        estagiario.processo.includes(searchTerm);
+        String(estagiario.processo).includes(searchTerm);
         
       const matchesCurso = filterCurso === 'Todos' || estagiario.curso === filterCurso;
       const matchesTurma = filterTurma === 'Todos' || estagiario.turma === filterTurma;
@@ -304,6 +359,7 @@ export default function EstagiariosProfPage() {
                         key={e.id} 
                         className="hover:bg-gray-50 dark:hover:bg-gray-700 transition duration-150 cursor-pointer"
                         whileHover={{ scale: 1.01, boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
+                        onClick={() => openPerfil(e.id)}
                       >
                         
                         {/* Coluna 1: Nome e Processo */}
@@ -338,9 +394,9 @@ export default function EstagiariosProfPage() {
                         {/* Coluna 5: Ações */}
                         <td className="px-4 py-4 whitespace-nowrap text-center text-sm font-medium">
                           <div className="flex justify-center space-x-2">
-                            <motion.button title="Ver Perfil" className="p-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition" whileHover={{ scale: 1.15 }}><User className="w-5 h-5" /></motion.button>
-                            <motion.button title="Ver Relatórios" className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 transition" whileHover={{ scale: 1.15 }}><FileText className="w-5 h-5" /></motion.button>
-                            <motion.button title="Ver Presenças" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }}><CalendarCheck className="w-5 h-5" /></motion.button>
+                            <motion.button title="Ver Perfil" className="p-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); openPerfil(e.id); }}><User className="w-5 h-5" /></motion.button>
+                            <motion.button title="Ver Relatórios" className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); openRelatorios(e.id); }}><FileText className="w-5 h-5" /></motion.button>
+                            <motion.button title="Ver Presenças" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); openPresencas(e.id); }}><CalendarCheck className="w-5 h-5" /></motion.button>
                           </div>
                         </td>
                       </motion.tr>
@@ -361,7 +417,7 @@ export default function EstagiariosProfPage() {
                         className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
                     >
                         {currentEstagiarios.map(e => (
-                            <TableRowMobileOptimized key={e.id} e={e} />
+                          <TableRowMobileOptimized key={e.id} e={e} onOpen={openPerfil} onOpenRel={openRelatorios} onOpenPres={openPresencas} />
                         ))}
                     </motion.tbody>
                 </table>

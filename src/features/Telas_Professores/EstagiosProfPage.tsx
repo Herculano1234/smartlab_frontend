@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -8,12 +8,17 @@ import {
   Play,
   StopCircle,
   Eye,
-  LucideIcon,
   Calendar,
   Layers,
   GraduationCap,
   TrendingUp,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+import api from '../../api';
+import { useNavigate } from 'react-router-dom';
+import { useToast } from '../../components/ToastContext';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 // === TIPAGEM E DADOS MOCKADOS ===
 
@@ -47,9 +52,9 @@ const mockEstagios: Estagio[] = [
     { id: 6, nome_estagiario: "Ana Beatriz Gomes", processo: "2023080", curso: "Eng. Elétrica", turma: "ELET B", area: "Robótica", data_inicio: "01/04/2024", data_termino: "01/10/2024", status: 'Pendente' },
 ];
 
-const availableCursos = Array.from(new Set(mockEstagios.map(e => e.curso)));
-const availableAreas = Array.from(new Set(mockEstagios.map(e => e.area)));
 const availableStatus = Object.keys(statusColors) as EstagioStatus[];
+
+// We'll try to fetch `/estagios` from the backend — fallback to mockEstagios on error
 
 // Componente para a Tag de Status
 const StatusTag: React.FC<{ status: EstagioStatus }> = ({ status }) => {
@@ -106,9 +111,49 @@ export default function EstagiosProfPage() {
   const [filterArea, setFilterArea] = useState<string | 'Todos'>('Todos');
   const [filterStatus, setFilterStatus] = useState<EstagioStatus | 'Todos'>('Todos');
 
-  const [estagios] = useState<Estagio[]>(mockEstagios); 
+  const [estagios, setEstagios] = useState<Estagio[]>(mockEstagios);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await api.get('/estagios');
+        if (!mounted) return;
+        if (Array.isArray(res.data) && res.data.length) {
+          // Normalize to Estagio interface where possible
+          const normalized = res.data.map((r:any) => ({
+            id: r.id,
+            nome_estagiario: r.nome || r.nome_estagiario || (r.estagiario && r.estagiario.nome) || '—',
+            processo: r.processo || r.numero_processo || r.numero || '',
+            curso: r.curso || r.departamento || '—',
+            turma: r.turma || '—',
+            area: r.area || r.area_de_estagio || '—',
+            data_inicio: r.data_inicio || r.data_inicio_estado || '',
+            data_termino: r.data_termino || r.data_prevista || '',
+            status: (String(r.estado || r.status || r.estado_estagio || 'Pendente')).includes('Concl') ? 'Concluído' : (String(r.estado || r.status || r.estado_estagio || 'Pendente')).includes('Ativo') ? 'Ativo' : 'Pendente'
+          } as Estagio));
+          setEstagios(normalized);
+        }
+      } catch (err:any) {
+        console.warn('Não foi possível buscar /estagios do backend — usando dados mock.', err?.response?.data || err.message || err);
+        setError(err?.response?.data?.error || err?.message || null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   // Lógica de Filtragem e Busca
+  const availableCursos = useMemo(() => Array.from(new Set(estagios.map(e => e.curso).filter(Boolean))), [estagios]);
+  const availableAreas = useMemo(() => Array.from(new Set(estagios.map(e => e.area).filter(Boolean))), [estagios]);
+
   const filteredEstagios = useMemo(() => {
     return estagios.filter(estagio => {
       const matchesSearch = 
@@ -127,6 +172,120 @@ export default function EstagiosProfPage() {
   }, [estagios, searchTerm, filterCurso, filterArea, filterStatus]);
   
   const chartData = useMemo(() => calculateChartData(estagios), [estagios]);
+
+  const openEstagio = (id:number) => { navigate(`/professor/estagios/${id}`); };
+
+  // Date formatter (PT)
+  const dateFormatter = new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const formatDate = (v?: string|null) => {
+    if (!v) return '';
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return String(v);
+    return dateFormatter.format(d);
+  };
+
+  const toast = useToast();
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [confirmAction, setConfirmAction] = React.useState<null | { type: 'start'|'finish'; id:number }>(null);
+
+  const reloadEstagios = async () => {
+    try {
+      const res = await api.get('/estagios');
+      if (Array.isArray(res.data)) {
+        setEstagios(res.data.map((r:any)=>({
+          id: r.id,
+          nome_estagiario: r.nome_estagiario,
+          processo: r.processo,
+          curso: r.curso,
+          turma: r.turma,
+          area: r.area,
+          data_inicio: r.data_inicio,
+          data_termino: r.data_termino || '',
+          status: r.status
+        })));
+      }
+    } catch (err:any) { console.error('Erro ao recarregar estagios', err); }
+  };
+
+  // Actions: iniciar / encerrar estágio (use dialog + toast)
+  const startEstagio = (id:number) => {
+    setConfirmAction({ type: 'start', id });
+    setConfirmOpen(true);
+  };
+
+  const finishEstagio = (id:number) => {
+    setConfirmAction({ type: 'finish', id });
+    setConfirmOpen(true);
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmAction) return setConfirmOpen(false);
+    const { type, id } = confirmAction;
+    setConfirmOpen(false);
+    try {
+      if (type === 'start') {
+        await api.post(`/estagios/${id}/start`);
+        toast.showToast('Estágio iniciado com sucesso', 'success');
+      } else {
+        await api.post(`/estagios/${id}/finish`);
+        toast.showToast('Estágio encerrado com sucesso', 'success');
+      }
+      await reloadEstagios();
+    } catch (err:any) {
+      console.error('Erro na ação de estágio', err);
+      toast.showToast('Erro: ' + (err?.response?.data?.error || err?.message || 'ocorreu um erro'), 'error');
+    } finally {
+      setConfirmAction(null);
+    }
+  };
+
+  // Compute simplified next actions from estagios data
+  const nextActions = useMemo(() => {
+    const actions: Array<{ type: string; title: string; subtitle?: string; id?: number }> = [];
+    const now = Date.now();
+    // 1) Pending: suggest starting
+    const pendentes = estagios.filter(s => s.status === 'Pendente').slice(0, 3);
+    pendentes.forEach(p => actions.push({ type: 'Pendente', title: `${p.nome_estagiario} (${p.processo})`, subtitle: 'Aguardando início do estágio', id: p.id }));
+
+    // 2) Ending soon: within 30 days
+    const soon = estagios.filter(s => {
+      if (!s.data_termino) return false;
+      const d = new Date(s.data_termino);
+      if (isNaN(d.getTime())) return false;
+      const diff = d.getTime() - now;
+      return diff >= 0 && diff <= 30 * 24 * 60 * 60 * 1000;
+    }).slice(0, 3);
+    soon.forEach(s => actions.push({ type: 'Termina em breve', title: `${s.nome_estagiario} — termina ${formatDate(s.data_termino)}`, subtitle: `Turma ${s.turma}`, id: s.id }));
+
+    // 3) Recently started (last 7 days) — notify review
+    const recent = estagios.filter(s => {
+      if (!s.data_inicio) return false;
+      const d = new Date(s.data_inicio);
+      if (isNaN(d.getTime())) return false;
+      const diff = now - d.getTime();
+      return diff >= 0 && diff <= 7 * 24 * 60 * 60 * 1000;
+    }).slice(0, 3);
+    recent.forEach(r => actions.push({ type: 'Recém iniciado', title: `${r.nome_estagiario}`, subtitle: `Iniciado em ${formatDate(r.data_inicio)}`, id: r.id }));
+
+    return actions;
+  }, [estagios]);
+
+  // Counters resumidos: pendentes, ativos, concluídos, terminam em 30 dias
+  const counters = useMemo(() => {
+    const now = Date.now();
+    const pending = estagios.filter(s => s.status === 'Pendente').length;
+    const active = estagios.filter(s => s.status === 'Ativo').length;
+    const concluded = estagios.filter(s => s.status === 'Concluído').length;
+    const endingSoon = estagios.filter(s => {
+      if (!s.data_termino) return false;
+      const d = new Date(s.data_termino);
+      if (isNaN(d.getTime())) return false;
+      const diff = d.getTime() - now;
+      return diff >= 0 && diff <= 30 * 24 * 60 * 60 * 1000;
+    }).length;
+
+    return { pending, active, concluded, endingSoon };
+  }, [estagios]);
 
 
   // Renderiza a lista de filtros
@@ -167,6 +326,41 @@ export default function EstagiosProfPage() {
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
             Gestão do Ciclo de Estágios
         </h1>
+
+        {/* Contadores resumidos no topo */}
+        <motion.div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6" variants={itemVariants}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm flex items-center space-x-3">
+            <Clock className="w-6 h-6 text-gray-500 dark:text-gray-300" />
+            <div>
+              <div className="text-sm text-gray-500">Pendentes</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{counters.pending}</div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm flex items-center space-x-3">
+            <Briefcase className="w-6 h-6 text-blue-500" />
+            <div>
+              <div className="text-sm text-gray-500">Ativos</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{counters.active}</div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm flex items-center space-x-3">
+            <CheckCircle className="w-6 h-6 text-green-500" />
+            <div>
+              <div className="text-sm text-gray-500">Concluídos</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{counters.concluded}</div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm flex items-center space-x-3">
+            <Calendar className="w-6 h-6 text-orange-500" />
+            <div>
+              <div className="text-sm text-gray-500">Terminam em 30d</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{counters.endingSoon}</div>
+            </div>
+          </div>
+        </motion.div>
 
         <div className="space-y-8">
             
@@ -303,7 +497,7 @@ export default function EstagiosProfPage() {
                         
                         {/* Coluna 3: Período (Datas) */}
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 hidden sm:table-cell">
-                            {s.data_inicio} - {s.data_termino}
+                          {formatDate(s.data_inicio)}{s.data_termino ? ` - ${formatDate(s.data_termino)}` : ''}
                         </td>
                         
                         {/* Coluna 4: Status (com Tag colorida) */}
@@ -314,12 +508,12 @@ export default function EstagiosProfPage() {
                         {/* Coluna 5: Ações */}
                         <td className="px-4 py-4 whitespace-nowrap text-center text-sm font-medium">
                           <div className="flex justify-center space-x-2">
-                            <motion.button title="Ver Detalhes" className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 transition" whileHover={{ scale: 1.15 }}><Eye className="w-5 h-5" /></motion.button>
+                            <motion.button title="Ver Detalhes" className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 transition" whileHover={{ scale: 1.15 }} onClick={(e)=>{ e.stopPropagation(); openEstagio(s.id); }}><Eye className="w-5 h-5" /></motion.button>
                             {s.status === 'Pendente' && (
-                                <motion.button title="Iniciar Estágio" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }}><Play className="w-5 h-5" /></motion.button>
+                                <motion.button title="Iniciar Estágio" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }} onClick={(e)=>{ e.stopPropagation(); startEstagio(s.id); }}><Play className="w-5 h-5" /></motion.button>
                             )}
                              {s.status === 'Ativo' && (
-                                <motion.button title="Encerrar Estágio" className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition" whileHover={{ scale: 1.15 }}><StopCircle className="w-5 h-5" /></motion.button>
+                                <motion.button title="Encerrar Estágio" className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition" whileHover={{ scale: 1.15 }} onClick={(e)=>{ e.stopPropagation(); finishEstagio(s.id); }}><StopCircle className="w-5 h-5" /></motion.button>
                             )}
                           </div>
                         </td>
@@ -336,17 +530,47 @@ export default function EstagiosProfPage() {
                 variants={itemVariants}
                 whileHover={{ x: 5 }}
             >
-              <div className="flex items-center space-x-3">
-                <Layers className="w-6 h-6 text-blue-500 flex-shrink-0" />
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <Layers className="w-6 h-6 text-blue-500 flex-shrink-0" />
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Próximas Ações</h3>
+                    <p className="text-sm text-gray-500">Itens gerados a partir dos estágios recentes</p>
+                  </div>
+                </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Próximas Ações</h3>
-                  <ul className="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside mt-1">
-                    <li>O estágio de **Maria Luisa Costa** (2023055) está **Pendente**. Necessário iniciar o processo.</li>
-                    <li>O estágio de **Bruna Lima Ferreira** (2022021) está previsto para **terminar em Março**. Prepare a avaliação final.</li>
-                  </ul>
+                  <button className="text-xs text-sky-600 hover:text-sky-800" onClick={reloadEstagios}>Atualizar</button>
                 </div>
               </div>
+
+              <div className="space-y-3">
+                {nextActions.length === 0 ? (
+                  <div className="text-sm text-gray-500">Nenhuma ação pendente no momento.</div>
+                ) : (
+                  nextActions.map((a, idx) => (
+                    <div key={idx} className="flex items-start justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">{a.title}</div>
+                        {a.subtitle && <div className="text-xs text-gray-500 dark:text-gray-400">{a.subtitle}</div>}
+                        <div className="text-xs text-gray-400 mt-1">{a.type}</div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {typeof a.id === 'number' && <button className="text-xs px-2 py-1 bg-sky-50 dark:bg-sky-900 rounded text-sky-600" onClick={() => openEstagio(a.id as number)}>Detalhes</button>}
+                        {typeof a.id === 'number' && <button className="text-xs px-2 py-1 bg-gray-50 dark:bg-gray-800 rounded" onClick={() => navigate(`/professor/estagiarios/${a.id as number}`)}>Perfil</button>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </motion.div>
+
+            <ConfirmDialog
+              open={confirmOpen}
+              title={confirmAction?.type === 'start' ? 'Iniciar Estágio' : 'Encerrar Estágio'}
+              message={confirmAction?.type === 'start' ? 'Deseja iniciar este estágio agora?' : 'Deseja encerrar este estágio agora?'}
+              onConfirm={handleConfirm}
+              onCancel={() => { setConfirmOpen(false); setConfirmAction(null); }}
+            />
 
           </div>
       </motion.main>

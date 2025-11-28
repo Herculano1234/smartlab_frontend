@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useProfessor from '../../../hooks/useProfessor';
 import { Link, useLocation } from 'react-router-dom';
 
 interface Props {
@@ -29,6 +30,7 @@ const navLinks: NavLinkItem[] = [
 
 export default function ProfSidebar({ isOpen, onClose, onToggleCompact }: Props) {
   const location = useLocation();
+  const { professor } = useProfessor();
   // Novo estado local para gerenciar o modo compactado/expandido no desktop.
   // A lógica de setar este estado deve vir de 'onToggleCompact' no componente pai.
   const [isCompact, setIsCompact] = useState(false); 
@@ -76,12 +78,13 @@ export default function ProfSidebar({ isOpen, onClose, onToggleCompact }: Props)
           
           {/* Cabeçalho do Perfil/Logo */}
           <div className="mb-8 flex items-center justify-center lg:justify-start gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">
-            <div className={`w-10 h-10 bg-sky-600 rounded-full flex items-center justify-center text-white text-lg shadow-md flex-shrink-0 ${isCompact ? 'mx-auto' : ''}`}>
-              <i className="fas fa-user-tie"></i>
+            {/* Foto do professor vindo do backend */}
+            <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shadow-md flex-shrink-0 ${isCompact ? 'mx-auto' : ''}`}>
+              <img src={professor?.foto || '/public/avatar-placeholder.png'} alt="avatar" className="w-full h-full object-cover" />
             </div>
             {/* Esconde texto no modo compacto */}
             <div className={`transition-opacity duration-300 ${isCompact ? 'opacity-0 hidden' : 'opacity-100 block'}`}>
-              <div className="text-sm font-extrabold text-gray-800 dark:text-gray-100">Professor XPTO</div>
+              <div className="text-sm font-extrabold text-gray-800 dark:text-gray-100">{professor?.nome_completo || 'Professor'}</div>
               <div className="text-xs text-sky-600 dark:text-sky-400 font-medium">ITEL - Lab 3</div>
             </div>
             {/* Botão de Toggle (Apenas em telas grandes) */}

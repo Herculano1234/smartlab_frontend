@@ -1,18 +1,23 @@
 import React, { useEffect, useState } from 'react';
+import api from '../../../api';
 
 export default function MateriaisCard({ estagiario }: any) {
   const [emprestimos, setEmprestimos] = useState<any[]>([]);
 
   useEffect(() => {
-    // Busca empréstimos do estagiario (se backend disponível)
     if (!estagiario?.id) return;
-    fetch('/api/emprestimos')
-      .then(r => r.json())
-      .then((rows) => {
-        const filtered = rows.filter((e: any) => e.estagiario_id === estagiario.id);
-        setEmprestimos(filtered.slice(0, 6));
-      })
-      .catch(() => setEmprestimos([]));
+
+    async function load() {
+      try {
+        const res = await api.get(`/estagiarios/${encodeURIComponent(estagiario.id)}/emprestimos`);
+        const rows = Array.isArray(res.data) ? res.data : [];
+        setEmprestimos(rows.slice(0, 6));
+      } catch (e) {
+        setEmprestimos([]);
+      }
+    }
+
+    load();
   }, [estagiario]);
 
   return (
@@ -28,11 +33,11 @@ export default function MateriaisCard({ estagiario }: any) {
           {emprestimos.map((e) => (
             <li key={e.id} className="flex justify-between">
               <div>
-                <div className="font-medium">{e.nome_material || e.material_id}</div>
-                <div className="text-xs text-gray-500">Emprestado: {new Date(e.data_emprestimo).toLocaleDateString()}</div>
+                <div className="font-medium">{e.nome_material || e.nome_material || e.material_id}</div>
+                <div className="text-xs text-gray-500">Emprestado: {new Date(e.data_inicio || e.data_emprestimo || e.created_at || Date.now()).toLocaleDateString()}</div>
               </div>
               <div className="text-sm">
-                <div className={`font-semibold ${e.status === 'emprestado' ? 'text-yellow-600' : 'text-green-600'}`}>{e.status}</div>
+                <div className={`font-semibold ${String(e.status).toLowerCase().includes('uso') || String(e.status).toLowerCase().includes('emprest') ? 'text-yellow-600' : 'text-green-600'}`}>{e.status || 'Empréstimo'}</div>
               </div>
             </li>
           ))}

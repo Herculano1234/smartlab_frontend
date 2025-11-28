@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -10,12 +10,14 @@ import {
   MessageSquare,
   Eye,
   Send, // Para Aprovar
-  LucideIcon,
   Filter,
   Users,
   Calendar,
   XCircle, // <-- Ícone XCircle adicionado aqui
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import api from '../../api';
+import { useToast } from '../../components/ToastContext';
 
 // === TIPAGEM E DADOS MOCKADOS ===
 
@@ -38,17 +40,7 @@ const statusColors: Record<RelatorioStatus, { color: string, Icon: LucideIcon }>
     'Revisado': { color: 'text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900', Icon: RotateCcw }, // Amarelo/Âmbar
 };
 
-const mockRelatorios: Relatorio[] = [
-    { id: 1, titulo: "Relatório Mensal - Automação da Linha X", nome_estagiario: "João Pedro Alves", curso: "Eng. Elétrica", data_envio: "15/03/2024", status: 'Pendente', conteudo: "O projeto de automação progrediu 20% neste mês..." },
-    { id: 2, titulo: "Estudo de Caso: Segurança Web", nome_estagiario: "Maria Luisa Costa", curso: "Ciência da Computação", data_envio: "05/03/2024", status: 'Revisado', conteudo: "A análise de vulnerabilidades mostrou falhas críticas..." },
-    { id: 3, titulo: "Conclusão de Estágio - Desenho Industrial", nome_estagiario: "Carlos Henrique Souza", curso: "Eng. Mecânica", data_envio: "01/09/2023", status: 'Aprovado', conteudo: "Todas as metas do estágio foram concluídas com sucesso..." },
-    { id: 4, titulo: "Relatório Semanal - Potência", nome_estagiario: "Bruna Lima Ferreira", curso: "Eng. Elétrica", data_envio: "20/03/2024", status: 'Pendente', conteudo: "Foi realizada a manutenção preditiva no transformador principal..." },
-    { id: 5, titulo: "Análise de Dados - Criptografia", nome_estagiario: "Pedro Rocha Santos", curso: "Ciência da Computação", data_envio: "18/03/2024", status: 'Aprovado' as RelatorioStatus, conteudo: "Implementação de algoritmo RSA para proteção de dados sensíveis." },
-];
-
-// Opções para Filtros
-const availableCursos = Array.from(new Set(mockRelatorios.map(r => r.curso)));
-const availableEstagiarios = Array.from(new Set(mockRelatorios.map(r => r.nome_estagiario)));
+// State fetched from backend
 const availableStatus = Object.keys(statusColors) as RelatorioStatus[];
 
 
@@ -95,32 +87,82 @@ export default function RelatoriosProfPage() {
   const [filterEstagiario, setFilterEstagiario] = useState<string | 'Todos'>('Todos');
   const [filterStatus, setFilterStatus] = useState<RelatorioStatus | 'Todos'>('Todos');
   const [selectedReport, setSelectedReport] = useState<Relatorio | null>(null);
+  const [relatorios, setRelatorios] = useState<Relatorio[]>([]);
+  const [estagiariosMap, setEstagiariosMap] = useState<Record<number, any>>({});
+  const toast = useToast();
 
-  // Lógica de Filtragem e Busca
+  // Fetch relatorios and estagiarios from backend and normalize
+  useEffect(() => {
+    async function load() { await reloadRelatorios(); }
+    load();
+  }, []);
+
+  const reloadRelatorios = async () => {
+    try {
+      const [rResp, eResp] = await Promise.all([api.get('/relatorios'), api.get('/estagiarios')]);
+      const ests:any[] = Array.isArray(eResp.data) ? eResp.data : [];
+      const map: Record<number, any> = {};
+      ests.forEach(e => { map[e.id] = e; });
+      setEstagiariosMap(map);
+
+      const rels: Relatorio[] = (Array.isArray(rResp.data) ? rResp.data : []).map((row:any) => ({
+        id: Number(row.id),
+        titulo: row.titulo,
+        nome_estagiario: (map[row.id_estagiario] && (map[row.id_estagiario].nome || map[row.id_estagiario].nome_completo)) || '—',
+        curso: (map[row.id_estagiario] && map[row.id_estagiario].curso) || '—',
+        data_envio: row.data_envio || row.created_at || '',
+        status: (row.status || 'Pendente') as RelatorioStatus,
+        conteudo: row.conteudo || ''
+      }));
+      setRelatorios(rels);
+    } catch (err:any) {
+      console.error('Erro ao carregar relatórios', err);
+      try { toast.showToast('Erro ao carregar relatórios: ' + (err?.response?.data?.error || err?.message || ''), 'error'); } catch(e){}
+    }
+  };
+
+  const approveReport = async (id:number) => {
+    try {
+      await api.put(`/relatorios/${encodeURIComponent(id)}`, { status: 'Aprovado' });
+      try { toast.showToast('Relatório aprovado', 'success'); } catch(e){}
+      await reloadRelatorios();
+    } catch (err:any) {
+      console.error('Erro ao aprovar relatório', err);
+      try { toast.showToast('Erro ao aprovar: ' + (err?.response?.data?.error || err?.message || ''), 'error'); } catch(e){}
+    }
+  };
+
+  const requestReview = async (id:number) => {
+    try {
+      await api.put(`/relatorios/${encodeURIComponent(id)}`, { status: 'Revisado' });
+      try { toast.showToast('Solicitação de revisão enviada', 'info'); } catch(e){}
+      await reloadRelatorios();
+    } catch (err:any) {
+      console.error('Erro ao solicitar revisão', err);
+      try { toast.showToast('Erro ao solicitar revisão: ' + (err?.response?.data?.error || err?.message || ''), 'error'); } catch(e){}
+    }
+  };
+
   const filteredRelatorios = useMemo(() => {
-    return mockRelatorios.filter(relatorio => {
+    return relatorios.filter(relatorio => {
       const matchesSearch = 
         relatorio.titulo.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        relatorio.nome_estagiario.toLowerCase().includes(searchTerm.toLowerCase());
-        
+        (relatorio.nome_estagiario || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCurso = filterCurso === 'Todos' || relatorio.curso === filterCurso;
       const matchesEstagiario = filterEstagiario === 'Todos' || relatorio.nome_estagiario === filterEstagiario;
       const matchesStatus = filterStatus === 'Todos' || relatorio.status === filterStatus;
-      
-      // Filtro de Período (simulado, não implementado)
-
       return matchesSearch && matchesCurso && matchesEstagiario && matchesStatus;
     });
-  }, [searchTerm, filterCurso, filterEstagiario, filterStatus]);
+  }, [relatorios, searchTerm, filterCurso, filterEstagiario, filterStatus]);
 
   const reportMetrics = useMemo(() => {
     return availableStatus.map(status => ({
         status,
-        count: mockRelatorios.filter(r => r.status === status).length,
+        count: relatorios.filter(r => r.status === status).length,
         color: statusColors[status].color.split(' ')[0].replace('text-', 'text-'),
         Icon: statusColors[status].Icon,
     }));
-  }, []);
+  }, [relatorios]);
 
   // Renderiza a lista de filtros
   const renderFilterButtons = (label: string, options: string[], currentFilter: string, setFilter: (val: any) => void) => (
@@ -145,6 +187,10 @@ export default function RelatoriosProfPage() {
       </div>
     </div>
   );
+
+  // Deriva opções de filtros a partir dos relatórios carregados
+  const availableCursos = Array.from(new Set(relatorios.map(r => r.curso).filter(Boolean)));
+  const availableEstagiarios = Array.from(new Set(relatorios.map(r => r.nome_estagiario).filter(Boolean)));
 
   // Componente para o Modal/Side Panel
   const ReportModal: React.FC<{ report: Relatorio, onClose: () => void }> = ({ report, onClose }) => (
@@ -183,7 +229,7 @@ export default function RelatoriosProfPage() {
                 <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">{report.conteudo}</p>
             </div>
 
-            <div className="mt-6 border-t pt-4 dark:border-gray-700">
+                    <div className="mt-6 border-t pt-4 dark:border-gray-700">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Comentários e Ações</h3>
                 
                 {/* Área para Adicionar Comentário */}
@@ -195,15 +241,15 @@ export default function RelatoriosProfPage() {
 
                 {/* Botões de Ação no Modal */}
                 <div className="flex justify-end space-x-3">
-                    <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center space-x-2">
-                        <CheckCircle className="w-5 h-5" />
-                        <span>Aprovar</span>
-                    </button>
-                    <button className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition flex items-center space-x-2">
-                        <RotateCcw className="w-5 h-5" />
-                        <span>Solicitar Revisão</span>
-                    </button>
-                </div>
+                <button onClick={(e)=>{ e.stopPropagation(); approveReport(report.id); }} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center space-x-2">
+                  <CheckCircle className="w-5 h-5" />
+                  <span>Aprovar</span>
+                </button>
+                <button onClick={(e)=>{ e.stopPropagation(); requestReview(report.id); }} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition flex items-center space-x-2">
+                  <RotateCcw className="w-5 h-5" />
+                  <span>Solicitar Revisão</span>
+                </button>
+              </div>
             </div>
         </div>
       </motion.div>
@@ -368,10 +414,10 @@ export default function RelatoriosProfPage() {
                             </motion.button>
 
                             {r.status !== 'Aprovado' && (
-                                <motion.button title="Aprovar" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }}><CheckCircle className="w-5 h-5" /></motion.button>
+                              <motion.button title="Aprovar" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }} onClick={(e)=>{ e.stopPropagation(); approveReport(r.id); }}><CheckCircle className="w-5 h-5" /></motion.button>
                             )}
                             {r.status !== 'Revisado' && (
-                                <motion.button title="Solicitar Revisão" className="p-2 text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 transition" whileHover={{ scale: 1.15 }}><RotateCcw className="w-5 h-5" /></motion.button>
+                              <motion.button title="Solicitar Revisão" className="p-2 text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 transition" whileHover={{ scale: 1.15 }} onClick={(e)=>{ e.stopPropagation(); requestReview(r.id); }}><RotateCcw className="w-5 h-5" /></motion.button>
                             )}
                             <motion.button title="Adicionar Comentário" className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition" whileHover={{ scale: 1.15 }}><MessageSquare className="w-5 h-5" /></motion.button>
                           </div>

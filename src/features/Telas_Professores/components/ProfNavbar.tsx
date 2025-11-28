@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import useProfessor from '../../../hooks/useProfessor';
 
 interface Props {
   onToggleSidebar: () => void;
@@ -8,6 +9,7 @@ interface Props {
 export default function ProfNavbar({ onToggleSidebar, title = 'Painel do Professor' }: Props) {
   // 1. Hook para gerenciar o estado do menu mobile no navbar
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { professor } = useProfessor();
 
   // Função para alternar o menu mobile
   const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -45,10 +47,10 @@ export default function ProfNavbar({ onToggleSidebar, title = 'Painel do Profess
               </button>
             </div>
 
-            {/* Perfil do Usuário */}
+            {/* Perfil do Usuário (foto e nome vindos do backend) */}
             <div className="flex items-center gap-2 cursor-pointer group">
-              <img src="/public/avatar-placeholder.png" alt="avatar" className="w-10 h-10 rounded-full object-cover border-2 border-transparent group-hover:border-sky-500 transition duration-150" />
-              <div className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-200">Professor</div>
+              <img src={professor?.foto || '/public/avatar-placeholder.png'} alt="avatar" className="w-10 h-10 rounded-full object-cover border-2 border-transparent group-hover:border-sky-500 transition duration-150" />
+              <div className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-200">{professor?.nome_completo || 'Professor'}</div>
             </div>
 
             {/* Botão Hambúrguer Mobile (Aparece apenas em telas menores) */}

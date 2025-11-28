@@ -17,9 +17,11 @@ import MateriaisProfPage from './features/Telas_Professores/MateriaisProfPage';
 import RelatoriosProfPage from './features/Telas_Professores/RelatoriosProfPage';
 import PerfilProfPage from './features/Telas_Professores/PerfilProfPage';
 import EstagiariosProfPage from './features/Telas_Professores/EstagiariosProfPage';
+import EstagiarioProfile from './features/Telas_Professores/EstagiarioProfile';
 import EstagiosProfPage from './features/Telas_Professores/EstagiosProfPage';
 import EmprestimosProfPage from './features/Telas_Professores/EmprestimosProfPage';
 import CadastroMaterial from './features/CadastroMaterial';
+import EstagioProfile from './features/Telas_Professores/EstagioProfile';
 import { Routes, Route, useLocation, Navigate, Outlet } from "react-router-dom";
 function RequireAuth({ perfil }: { children?: React.ReactNode; perfil: string }) {
   // usar chaves lowercase definidas pelo login de desenvolvimento
@@ -82,7 +84,9 @@ function App() {
         <Route path="/professor" element={<ProfessorLayout />}>
             <Route index element={<ProfessorHome />} />
             <Route path="estagiarios" element={<EstagiariosProfPage />} />
+            <Route path="estagiarios/:id" element={<EstagiarioProfile />} />
             <Route path="estagios" element={<EstagiosProfPage />} />
+            <Route path="estagios/:id" element={<EstagioProfile />} />
             <Route path="emprestimos" element={<EmprestimosProfPage />} />
             <Route path="presencas" element={<PresencasProfPage />} />
             <Route path="materiais" element={<MateriaisProfPage />} />
