@@ -1,37 +1,332 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import api from '../../api';
+import { useNavigate } from 'react-router-dom';
+import { HiEllipsisVertical, HiTrash, HiPencil, HiPlus, HiArchiveBoxArrowDown, HiTag, HiOutlineQrCode, HiOutlinePhoto } from "react-icons/hi2";
 
-export default function MateriaisPage() {
-  const [materiais, setMateriais] = useState<any[]>([]);
+// Interfaces originais
+interface Emprestimo {
+  id: string;
+  nome_material?: string;
+  material_id?: string;
+  data_emprestimo: string;
+  status: 'emprestado' | 'devolvido';
+}
 
-  useEffect(() => {
-    fetch('/api/materiais')
-      .then(r => r.json())
-      .then((rows) => setMateriais(rows))
-      .catch(() => setMateriais([]));
-  }, []);
+// Interface detalhada para material (item no inventário)
+interface MaterialInventario {
+  id: string;
+  nome: string;
+  descricao: string;
+  disponivel: number;
+  imageUrl: string;
+  qrId: string;
+  categoria: string;
+}
 
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold mb-4">Materiais</h1>
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
-        {materiais.length === 0 ? (
-          <div className="text-gray-500">Nenhum material cadastrado.</div>
-        ) : (
-          <ul className="space-y-3">
-            {materiais.map(m => (
-              <li key={m.id} className="flex justify-between items-center border p-3 rounded">
-                <div>
-                  <div className="font-medium">{m.nome}</div>
-                  <div className="text-xs text-gray-500">{m.descricao}</div>
-                </div>
-                <div className="text-sm text-gray-600">
-                  Disponível: {m.quantidade_disponivel}/{m.quantidade_total}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
+export default function MateriaisCard({ estagiario }: any) {
+  const navigate = useNavigate();
+  const [emprestimos, setEmprestimos] = useState<Emprestimo[]>([]);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  
+  // NOVO ESTADO: Inicializado como array vazio, será preenchido pelo fetch (backend real)
+  const [materiaisDisponiveis, setMateriaisDisponiveis] = useState<MaterialInventario[]>([]);
+  const [isLoadingInventario, setIsLoadingInventario] = useState(true);
+  
+  const menuRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  
+  // --- LÓGICA DE BUSCA DE DADOS ---
+
+  // 1. Efeito para buscar os EMPRÉSTIMOS do estagiário (mantido)
+  useEffect(() => {
+		if (!estagiario?.id) return;
+		(async () => {
+			try {
+				const res = await api.get('/emprestimos');
+				const rows = res.data;
+				const filtered = Array.isArray(rows) ? rows.filter((e: any) => String(e.estagiario_id) === String(estagiario.id)) : [];
+				setEmprestimos(filtered.slice(0, 6));
+			} catch (err) {
+				console.error('Erro ao carregar empréstimos do estagiário', err);
+				setEmprestimos([]);
+			}
+		})();
+  }, [estagiario]);
+
+  // 2. NOVO Efeito para buscar o INVENTÁRIO DISPONÍVEL (substituindo o mock)
+	useEffect(() => {
+		setIsLoadingInventario(true);
+		// Consumir o endpoint central de materiais do backend usando axios (api)
+		(async () => {
+			try {
+				const res = await api.get<any[]>('/materiais');
+				const rows: any[] = res.data;
+				// Normalizar o shape vindo do backend para MaterialInventario
+				const normalized = rows.map((r: any) => ({
+					id: r.id,
+					nome: r.nome_material || r.nome || 'Material',
+					descricao: r.descricao || r.descricao_curta || '',
+					disponivel: typeof r.disponivel !== 'undefined' ? r.disponivel : (typeof r.quantidade !== 'undefined' ? r.quantidade : 1),
+					imageUrl: r.foto || r.imageUrl || '/public/item-placeholder.png',
+					qrId: r.code_id || r.code || '',
+					categoria: r.nome_tipo || r.categoria || '—'
+				} as MaterialInventario));
+				setMateriaisDisponiveis(normalized);
+			} catch (error) {
+				console.error('Erro ao buscar inventário via api.get:', error);
+				setMateriaisDisponiveis([]);
+			} finally {
+				setIsLoadingInventario(false);
+			}
+		})();
+  }, []); // Roda apenas uma vez ao montar o componente
+  
+  // --- LÓGICA DE UI E AÇÕES (MANTIDA) ---
+
+  useEffect(() => {
+    // Fechar menu ao clicar fora
+    const handleClickOutside = (event: Event) => {
+      let shouldClose = true;
+      Object.values(menuRefs.current).forEach((ref) => {
+        if (ref && ref.contains(event.target as Node)) {
+          shouldClose = false;
+        }
+      });
+      if (shouldClose) {
+        setOpenMenuId(null);
+      }
+    };
+
+    if (openMenuId) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('touchstart', handleClickOutside);
+      };
+    }
+  }, [openMenuId]);
+
+  const toggleMenu = (id: string) => {
+    setOpenMenuId(openMenuId === id ? null : id);
+  };
+  
+	const handleSolicitarMaterial = async (material: MaterialInventario) => {
+		if (!estagiario?.id) return alert('Estagiário não identificado. Faça login.');
+		console.log(`Solicitando empréstimo do material: ${material.nome}`);
+
+		try {
+			// data_inicio no formato YYYY-MM-DD
+			const hoje = new Date().toISOString().split('T')[0];
+
+			const body = {
+				id_material: material.id,
+				id_estagiario: estagiario.id,
+				data_inicio: hoje
+			} as any;
+
+			const postResp = await api.post('/emprestimos', body);
+			const novo = postResp.data;
+			// backend returns the created emprestimo (may not include nome_material joined)
+			// Recarregar lista de empréstimos para garantir nome_material e dados completos
+			try {
+				const r2 = await api.get('/emprestimos');
+				const all = r2.data;
+				const filtered = Array.isArray(all) ? all.filter((e:any) => String(e.estagiario_id) === String(estagiario.id)) : [];
+				setEmprestimos(filtered.slice(0, 6));
+			} catch (e) {
+				// fallback: append the created row locally
+				setEmprestimos(prev => [novo, ...prev].slice(0, 6));
+			}
+
+			// decrement availability in UI if material matched
+			setMateriaisDisponiveis(prev => prev.map(m => m.id === material.id ? { ...m, disponivel: Math.max(0, (m.disponivel || 1) - 1) } : m));
+
+			alert(`Empréstimo solicitado com sucesso para "${material.nome}"`);
+		} catch (err: any) {
+			console.error('Erro ao solicitar material', err?.message || err);
+			alert('Erro ao solicitar material: ' + (err?.message || 'Erro desconhecido'));
+		}
+	};
+  
+  const handleDevolverMaterial = (id: string) => {
+    console.log(`Registrar devolução para empréstimo: ${id}`);
+    setOpenMenuId(null);
+  };
+  
+  const handleEditarEmprestimo = (id: string) => {
+    console.log(`Abrir edição para empréstimo: ${id}`);
+    setOpenMenuId(null);
+  };
+
+  // --- RENDERIZAÇÃO PRINCIPAL ---
+
+  return (
+    <>
+      <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow h-full flex flex-col">
+        
+        {/* Título e Botão de Cadastro (Gestão) */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+          <h3 className="font-bold text-lg md:text-xl text-sky-700 dark:text-sky-300 flex items-center gap-2">
+            <HiArchiveBoxArrowDown className="w-6 h-6" /> 
+            <span>Gestão de Materiais</span>
+          </h3>
+          
+          <button 
+            onClick={() => navigate('/cadastro-material')}
+            className="px-3 py-1 md:px-4 md:py-2 bg-gradient-to-br from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white text-xs md:text-sm rounded-lg transition transform hover:-translate-y-0.5 shadow-md flex items-center gap-2 whitespace-nowrap"
+            title="Adicionar novo material ao inventário"
+          >
+            <HiPencil className="w-4 h-4" />
+            <span className="hidden sm:inline">Cadastrar Material</span>
+          </button>
+        </div>
+        
+        {/* --- SEÇÃO DE MATERIAIS DISPONÍVEIS (Inventário) --- */}
+        <div className="mb-6 pb-4 border-b dark:border-gray-700">
+          <h4 className="font-semibold text-base text-gray-800 dark:text-gray-100 mb-3">Inventário Disponível para Empréstimo</h4>
+          
+          {isLoadingInventario ? (
+            <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+              Carregando inventário...
+            </div>
+          ) : materiaisDisponiveis.length === 0 ? (
+            <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+              Nenhum material disponível no momento.
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {materiaisDisponiveis.map((m) => (
+                <li key={m.id} className="flex items-start p-3 bg-white dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-sm transition-shadow">
+                  
+                  {/* Imagem */}
+                  <div className="flex-shrink-0 w-10 h-10 mr-3 rounded-md overflow-hidden bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+                    <img 
+                      src={m.imageUrl} 
+                      alt={m.nome} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => { 
+                        (e.target as HTMLImageElement).onerror = null; 
+                        // Fallback caso a imagem não carregue
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40/6b7280/FFFFFF?text=Item'; 
+                      }} 
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0 mr-4">
+                    {/* Nome e Descrição */}
+                    <div className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-1">{m.nome}</div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{m.descricao}</p>
+                    
+                    {/* Detalhes Técnicos */}
+                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="flex items-center gap-1">
+                            <HiOutlineQrCode className="w-3 h-3 text-sky-500" />
+                            **ID QR**: {m.qrId}
+                        </span>
+                        <span className="flex items-center gap-1">
+                            <HiTag className="w-3 h-3 text-indigo-500" />
+                            **Categoria**: {m.categoria}
+                        </span>
+                    </div>
+                  </div>
+                  
+                  {/* Status e Botão Solicitar */}
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <span className="text-xs font-bold text-gray-800 dark:text-gray-200">
+                          Disp.: <span className="text-sky-600 dark:text-sky-400">{m.disponivel}</span>
+                      </span>
+
+                    <button
+                      onClick={() => handleSolicitarMaterial(m)}
+                      disabled={m.disponivel <= 0} // Desabilita se não houver estoque
+                      className={`px-3 py-1 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1 shadow-md ${
+                        m.disponivel > 0 ? 'bg-sky-500 hover:bg-sky-600' : 'bg-gray-400 cursor-not-allowed'
+                      }`}
+                      title={m.disponivel > 0 ? `Solicitar empréstimo de ${m.nome}` : 'Indisponível para empréstimo'}
+                    >
+                      <HiPlus className="w-3 h-3" />
+                      Solicitar
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* --- SEÇÃO DE EMPRÉSTIMOS DO ESTAGIÁRIO (Histórico) --- */}
+        <h4 className="font-semibold text-base text-gray-800 dark:text-gray-100 mb-3 border-t pt-4 dark:border-gray-700">Meus Empréstimos Ativos ({emprestimos.filter(e => e.status === 'emprestado').length} / {emprestimos.length})</h4>
+        
+        {emprestimos.length === 0 ? (
+          <div className="text-center py-8 flex-grow flex flex-col justify-center items-center border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+            <HiArchiveBoxArrowDown className="w-8 h-8 text-gray-400 dark:text-gray-500 mb-2" />
+            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Nenhum histórico de empréstimo registrado.</p>
+          </div>
+        ) : (
+          <ul className="space-y-3 overflow-y-auto">
+            {emprestimos.map((e) => (
+              <li key={e.id} className="flex justify-between items-start p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors relative">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm md:text-base line-clamp-1">
+                    {e.nome_material || e.material_id || 'Material Indefinido'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Empréstimo: {new Date(e.data_emprestimo).toLocaleDateString()}
+                  </div>
+                </div>
+                
+                {/* Status e Menu */}
+                <div className="flex items-center gap-2 ml-2">
+                  <span className={`text-xs md:text-sm font-medium px-2 py-1 rounded-full ${
+                    e.status === 'emprestado' 
+                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' 
+                      : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  }`}>
+                    {e.status === 'emprestado' ? 'Ativo' : 'Devolvido'}
+                  </span>
+
+                  {/* Menu Button */}
+                  {e.status === 'emprestado' && (
+                    <div 
+                      ref={(el) => { menuRefs.current[e.id] = el; }}
+                      className="relative z-10"
+                    >
+                      <button
+                        onClick={() => toggleMenu(e.id)}
+                        onTouchStart={(ev) => { ev.preventDefault(); toggleMenu(e.id); }}
+                        className="p-1.5 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors"
+                        title="Opções do Empréstimo"
+                      >
+                        <HiEllipsisVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+
+                      {/* Dropdown */}
+                      {openMenuId === e.id && (
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-20 overflow-hidden">
+                          <button
+                            onClick={() => handleEditarEmprestimo(e.id)}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-xs md:text-sm text-gray-700 dark:text-gray-200 transition-colors"
+                          >
+                            <HiPencil className="w-4 h-4" />
+                            Editar Empréstimo
+                          </button>
+                          <button
+                            onClick={() => handleDevolverMaterial(e.id)}
+                            className="w-full text-left px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-xs md:text-sm text-red-600 dark:text-red-400 transition-colors"
+                          >
+                            <HiTrash className="w-4 h-4" />
+                            Registrar Devolução
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  );
 }

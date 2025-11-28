@@ -15,7 +15,7 @@ export default function ProfileCard({ estagiario }: any) {
       <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-gray-600">
         <div>
           <div className="text-xs text-gray-400">Área</div>
-          <div>{estagiario?.area_estagio || '-'}</div>
+          <div>{estagiario?.area_estagio || estagiario?.area_de_estagio || '-'}</div>
         </div>
         <div>
           <div className="text-xs text-gray-400">Supervisor</div>
