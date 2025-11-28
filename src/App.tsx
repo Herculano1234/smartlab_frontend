@@ -19,6 +19,7 @@ import PerfilProfPage from './features/Telas_Professores/PerfilProfPage';
 import EstagiariosProfPage from './features/Telas_Professores/EstagiariosProfPage';
 import EstagiarioProfile from './features/Telas_Professores/EstagiarioProfile';
 import EstagiosProfPage from './features/Telas_Professores/EstagiosProfPage';
+import GruposEstagioPage from './features/Telas_Professores/GruposEstagioPage';
 import EmprestimosProfPage from './features/Telas_Professores/EmprestimosProfPage';
 import CadastroMaterial from './features/CadastroMaterial';
 import EstagioProfile from './features/Telas_Professores/EstagioProfile';
@@ -87,6 +88,7 @@ function App() {
             <Route path="estagiarios" element={<EstagiariosProfPage />} />
             <Route path="estagiarios/:id" element={<EstagiarioProfile />} />
             <Route path="estagios" element={<EstagiosProfPage />} />
+            <Route path="grupos" element={<GruposEstagioPage />} />
             <Route path="estagios/:id" element={<EstagioProfile />} />
             <Route path="emprestimos" element={<EmprestimosProfPage />} />
             <Route path="presencas" element={<PresencasProfPage />} />

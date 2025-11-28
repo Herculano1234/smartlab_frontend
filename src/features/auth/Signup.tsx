@@ -1,7 +1,7 @@
 import React, { useState, useCallback, memo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "@fortawesome/fontawesome-free/css/all.min.css";
-import api from "../../api";
+import api from "../../api"; // Assume-se que 'api' é uma instância do Axios ou similar configurada
 
 // ==================== ESTILOS AVANÇADOS E ANIMAÇÕES ====================
 const modernStyles = `
@@ -83,6 +83,7 @@ interface InputGroupProps {
   required?: boolean;
   isFullWidth?: boolean;
   children?: React.ReactNode;
+  disabled?: boolean;
 }
 
 const stepsConfig = [
@@ -91,7 +92,7 @@ const stepsConfig = [
   { id: 3, title: "Acesso ao Sistema", icon: "fas fa-shield-alt" },
 ];
 
-// ==================== COMPONENTE INPUTGROUP ====================
+// ==================== COMPONENTE INPUTGROUP (COM CORREÇÃO DE VALOR) ====================
 const InputGroup = memo(({ 
   id, 
   label, 
@@ -101,13 +102,14 @@ const InputGroup = memo(({
   placeholder, 
   required = true, 
   isFullWidth = false, 
-  children 
+  children,
+  disabled = false
 }: InputGroupProps) => {
-  const InputStyle = "w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none bg-white transition-colors duration-300 placeholder-gray-400 shadow-sm";
+  const InputStyle = "w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none bg-white transition-colors duration-300 placeholder-gray-400 shadow-sm disabled:bg-gray-100 disabled:cursor-not-allowed";
   
   return (
     <div className={`form-group relative ${isFullWidth ? 'md:col-span-2' : ''}`}>
-      <label htmlFor={id} className="input-label absolute top-2 left-4 text-xs font-medium text-gray-600 transition-all duration-200 transform">
+      <label htmlFor={id} className={`input-label absolute top-2 left-4 text-xs font-medium text-gray-600 transition-all duration-200 transform ${disabled ? 'opacity-50' : ''}`}>
         {label} {required && <span className="text-red-400">*</span>}
       </label>
       {type === "select" ? (
@@ -117,6 +119,7 @@ const InputGroup = memo(({
           onChange={onChange} 
           className={`${InputStyle} pt-6`} 
           required={required}
+          disabled={disabled}
         >
           {children}
         </select>
@@ -128,79 +131,145 @@ const InputGroup = memo(({
           onChange={onChange} 
           className={`${InputStyle} pt-6`} 
           required={required} 
+          disabled={disabled}
         />
       ) : (
         <input
           type={type}
           id={id}
-          value={value}
+          // CORREÇÃO: Garante que o valor é uma string para inputs controlados, especialmente quando desabilitados.
+          value={String(value)} 
           onChange={onChange}
           className={`${InputStyle} pt-6`}
           placeholder={placeholder}
           required={required}
+          disabled={disabled}
         />
       )}
     </div>
   );
 });
 
-// ==================== COMPONENTE STEP3 COM RFID ====================
+// ==================== COMPONENTE STEP3 COM RFID MODIFICADO (CORREÇÃO DE LÓGICA) ====================
 const Step3RFID = memo(({ formData, handleChange }: { formData: FormData; handleChange: any }) => {
-  const [rfidDisponivel, setRfidDisponivel] = useState(false);
+  const [loadingRfid, setLoadingRfid] = useState(false);
+  const [lastRfidFetch, setLastRfidFetch] = useState<boolean | null>(null);
 
   const buscarUID = useCallback(async () => {
+    // 1. Limpa o código anterior ao iniciar nova busca
+    handleChange({
+        target: {
+            id: 'codigoRFID',
+            value: '' 
+        }
+    });
+
+    setLoadingRfid(true);
+    setLastRfidFetch(null);
+    
     try {
-      const response = await fetch('https://smartlab-backend.vercel.app/rfid/ultimo');
-      const data = await response.json();
+      console.log('Iniciando busca de código RFID em /rfid...');
+      const response = await api.get('/rfid'); 
+      const data = response.data;
       
-      if (data.disponivel && data.code) {
+      // Log da resposta (mantido para debug do usuário)
+      console.log('Resposta RFID:', data);
+      
+      // CORREÇÃO APLICADA: Verifica apenas a existência de data.code.
+      // Ignoramos 'data.disponivel' para garantir que o campo seja preenchido se o código vier.
+      if (data.code) { 
+        // 2. Define o código no formulário
         handleChange({
           target: {
             id: 'codigoRFID',
             value: data.code
           }
         });
+        setLastRfidFetch(true); // Sucesso
         
-        setRfidDisponivel(true);
-        
-        await fetch('https://smartlab-backend.vercel.app/rfid/confirmar', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ code: data.code })
-        });
+      } else {
+         // Código não recebido ou vazio
+         setLastRfidFetch(false); // Falha
       }
     } catch (error) {
       console.error('Erro ao buscar UID:', error);
+      setLastRfidFetch(false); // Falha
+    } finally {
+      setLoadingRfid(false);
     }
   }, [handleChange]);
 
-  useEffect(() => {
-    const interval = setInterval(buscarUID, 2000);
-    return () => clearInterval(interval);
-  }, [buscarUID]);
+  // Texto de placeholder dinâmico
+  const placeholderText = loadingRfid 
+    ? "Aguardando leitura no leitor..." 
+    : (formData.codigoRFID ? "Código obtido com sucesso." : "Clique no ícone para obter o código");
+
+  // Define o ícone de status e botão de ação
+  let iconStatus: React.ReactNode;
+
+  if (loadingRfid) {
+    iconStatus = (
+      <span className="text-yellow-600 animate-spin" title="A procurar...">
+        <i className="fas fa-spinner text-lg"></i>
+      </span>
+    );
+  } else if (formData.codigoRFID) {
+    iconStatus = (
+      <button 
+        type="button" 
+        onClick={buscarUID} 
+        className="text-green-600 hover:text-green-700 transition-colors duration-300"
+        title="Código obtido. Clique para buscar um novo."
+      >
+        <i className="fas fa-check-circle text-lg"></i>
+      </button>
+    );
+  } else if (lastRfidFetch === false) {
+    iconStatus = (
+      <button 
+        type="button" 
+        onClick={buscarUID} 
+        className="text-red-500 hover:text-red-600 transition-colors duration-300"
+        title="Falha na leitura. Tente novamente."
+      >
+        <i className="fas fa-exclamation-circle text-lg"></i>
+      </button>
+    );
+  } else {
+     // Estado inicial ou após limpar
+     iconStatus = (
+      <button 
+        type="button" 
+        onClick={buscarUID} 
+        className="text-blue-500 hover:text-blue-600 transition-colors duration-300"
+        title="Obter Código RFID"
+      >
+        <i className="fas fa-wifi text-lg"></i>
+      </button>
+    );
+  }
+
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mobile-compact-form">
+      {/* Campo RFID com Botão de Ação */}
       <div className="relative">
         <InputGroup 
           id="codigoRFID" 
           label="Código RFID" 
           value={formData.codigoRFID} 
           onChange={handleChange} 
-          placeholder="Passe o cartão no leitor" 
+          placeholder={placeholderText} 
           isFullWidth={true} 
+          // O campo fica desabilitado para leitura manual
+          disabled={true} 
         />
-        {rfidDisponivel && (
-          <div className="absolute top-0 right-0 mt-8 mr-3">
-            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-              ✓ Detectado
-            </span>
-          </div>
-        )}
+        <div className="absolute top-0 right-0 mt-8 mr-3 z-20">
+          {iconStatus}
+        </div>
       </div>
       
+      {/* Outros campos permanecem os mesmos */}
       <InputGroup id="dataInicio" label="Data de Início do Estágio" type="date" value={formData.dataInicio} onChange={handleChange} />
       <InputGroup id="supervisor" label="Supervisor Responsável" value={formData.supervisor} onChange={handleChange} placeholder="Nome do Professor" />
       <InputGroup id="senha" label="Senha" type="password" value={formData.senha} onChange={handleChange} placeholder="Mínimo 6 caracteres" />
@@ -388,6 +457,7 @@ export default function Signup() {
     for (const field of currentStepFields) {
       if (field === "fotoPerfil") continue;
       
+      // Validação especial para Step 3: RFID é obrigatório
       if (!formData[field]) {
         setError(`Campo obrigatório não preenchido: ${getFieldLabel(field)}`);
         return false;
@@ -457,6 +527,13 @@ export default function Signup() {
       setIsSubmitting(false);
       return;
     }
+    
+    if (!formData.codigoRFID) {
+      setError("O Código RFID é obrigatório. Por favor, clique no ícone para obter o código do seu cartão.");
+      setIsSubmitting(false);
+      return;
+    }
+
 
     try {
       const estagiarioPayload: Record<string, any> = {
@@ -473,11 +550,13 @@ export default function Signup() {
         area_de_estagio: formData.areaEstagio,
         codigo_rfid: formData.codigoRFID,
         data_inicio_estado: formData.dataInicio,
-        id_professor: null,
+        // O id_professor pode precisar de lógica para ser obtido dinamicamente
+        id_professor: null, 
         password: formData.senha,
         foto: formData.fotoPerfil || null
       };
 
+      // Usa a instância 'api' para enviar os dados
       await api.post("/estagiarios", estagiarioPayload);
 
       setSuccess("Cadastro concluído com sucesso! Redirecionando para o Login...");
@@ -485,7 +564,8 @@ export default function Signup() {
     } catch (err: any) {
       console.error(err);
       const message = err?.response?.data?.error || err?.response?.data?.message || err.message || "Erro ao processar cadastro.";
-      setError(String(message));
+      // Tenta formatar a mensagem de erro da API
+      setError(typeof message === 'object' ? JSON.stringify(message) : String(message));
     } finally {
       setIsSubmitting(false);
     }
@@ -543,6 +623,7 @@ export default function Signup() {
   );
 
   const renderStep3 = () => (
+    // Componente Step3RFID modificado para leitura manual
     <Step3RFID formData={formData} handleChange={handleChange} />
   );
 

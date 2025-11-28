@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion'; // Importação essencial para animações
+import { motion, AnimatePresence } from 'framer-motion'; 
 import {
   Search,
   Package,
@@ -19,7 +19,7 @@ import api from '../../api';
 import { useToast } from '../../components/ToastContext';
 import { useNavigate } from 'react-router-dom';
 
-// === TIPAGEM E DADOS MOCKADOS (Sem alterações) ===
+// === TIPAGEM E DADOS MOCKADOS ===
 
 type MaterialType = string;
 
@@ -34,14 +34,31 @@ interface Material {
   created_at?: string | null;
 }
 
+// NOVO TIPO: Adicionado para acomodar os dados do visitante e a seleção
+interface VisitanteFormFields {
+  id_beneficiario?: number | null; // Usado para controlar a seleção no dropdown (ID do estagiário ou -1 para visitante)
+  id_estagiario?: number | null; // ID real do estagiário (será null se for visitante)
+  data_inicio?: string;
+  data_final?: string | null;
+
+  // Campos do VISITANTE (existirão se id_beneficiario for -1)
+  nome_visitante?: string | null;
+  genero_visitante?: 'Masculino' | 'Feminino' | string | null;
+  numero_processo_visitante?: string | null;
+  telefone_visitante?: string | null;
+  email_visitante?: string | null;
+  morada_visitante?: string | null;
+  curso_visitante?: string | null;
+  turma_visitante?: string | null;
+}
+
+
 const typeIcons: Record<MaterialType, LucideIcon> = {
   Eletrônico: Package,
   Mecânico: Gauge,
   Didático: Book,
   Químico: FlaskConical,
 };
-
-// No status tags here: `materiais` table has columns: nome_material, code_id, id_tipo_material, descricao, foto
 
 // Variantes de Animação para a entrada em cascata (Staggered Fade-in)
 const containerVariants = {
@@ -135,7 +152,11 @@ export default function MateriaisProfPage() {
   // Load estagiarios once for emprestimo modal
   const [estagiariosList, setEstagiariosList] = useState<Array<any>>([]);
   const [empModalOpen, setEmpModalOpen] = useState(false);
-  const [empForm, setEmpForm] = useState<{ id_estagiario?: number | null; data_inicio?: string; data_final?: string | null } | null>(null);
+  // ESTADO ATUALIZADO para usar o novo tipo VisitanteFormFields
+  const [empForm, setEmpForm] = useState<VisitanteFormFields | null>(null);
+  
+  // NOVO ESTADO: Termo de busca para a lista de beneficiários
+  const [beneficiarioSearchTerm, setBeneficiarioSearchTerm] = useState('');
 
   useEffect(() => {
     async function loadEstagiarios() {
@@ -148,6 +169,19 @@ export default function MateriaisProfPage() {
     }
     loadEstagiarios();
   }, []);
+  
+  // NOVA LÓGICA: Lista de Estagiários filtrada
+  const filteredEstagiariosList = useMemo(() => {
+      if (!beneficiarioSearchTerm) {
+          return estagiariosList;
+      }
+      const lowerSearch = beneficiarioSearchTerm.toLowerCase();
+      // Filtra por nome ou nome_completo
+      return estagiariosList.filter((est: any) =>
+          (est.nome || est.nome_completo || `#${est.id}`).toLowerCase().includes(lowerSearch)
+      );
+  }, [estagiariosList, beneficiarioSearchTerm]);
+
 
   // Lógica de Filtragem e Busca (sem alteração)
   const filteredMateriais = useMemo(() => {
@@ -198,6 +232,18 @@ export default function MateriaisProfPage() {
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
             Gestão de Materiais
         </h1>
+
+        {/* NOVO BOTÃO: Cadastrar Material (Item animado) */}
+        <motion.button 
+            variants={itemVariants} 
+            onClick={() => navigate('/cadastro-material')}
+            className="mb-6 px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-200 flex items-center space-x-2"
+            whileHover={{ scale: 1.05 }} 
+        >
+            <Package className="w-5 h-5" />
+            <span>Cadastrar Material</span>
+        </motion.button>
+        {/* FIM NOVO BOTÃO */}
 
         <div className="space-y-8">
             
@@ -317,7 +363,30 @@ export default function MateriaisProfPage() {
                           <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                             <div className="flex justify-center space-x-2">
                               <motion.button title="Ver Detalhes" className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); setSelectedMaterial(m); setIsEditing(false); setFormState(null); }}><Eye className="w-5 h-5" /></motion.button>
-                              <motion.button title="Registrar Empréstimo" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); setSelectedMaterial(m); setEmpModalOpen(true); const now = new Date(); const defaultStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`; const defaultEnd = toLocalDateTimeInput(new Date(now.getTime()+60*60*1000)); setEmpForm({ id_estagiario: estagiariosList?.[0]?.id ?? null, data_inicio: defaultStart, data_final: defaultEnd }); }}><Send className="w-5 h-5" /></motion.button>
+                              
+                              {/* ATUALIZAÇÃO: Inicialização do empForm */}
+                              <motion.button title="Registrar Empréstimo" className="p-2 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ 
+                                ev.stopPropagation(); 
+                                setSelectedMaterial(m); 
+                                setEmpModalOpen(true); 
+                                const now = new Date(); 
+                                const defaultStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`; 
+                                const defaultEnd = toLocalDateTimeInput(new Date(now.getTime()+60*60*1000)); 
+                                
+                                // Inicializa com id_beneficiario (para a seleção) e id_estagiario
+                                const initialEstagiarioId = estagiariosList?.[0]?.id ?? null;
+                                setEmpForm({ 
+                                  id_beneficiario: initialEstagiarioId, 
+                                  id_estagiario: initialEstagiarioId,
+                                  data_inicio: defaultStart, 
+                                  data_final: defaultEnd 
+                                }); 
+                                // Limpa o termo de busca do beneficiário
+                                setBeneficiarioSearchTerm('');
+                              }}>
+                                <Send className="w-5 h-5" />
+                              </motion.button>
+                              
                               <motion.button title="Editar Informações" className="p-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition" whileHover={{ scale: 1.15 }} onClick={(ev)=>{ ev.stopPropagation(); setSelectedMaterial(m); setIsEditing(true); setFormState({ ...m }); }}><Edit className="w-5 h-5" /></motion.button>
                             </div>
                           </td>
@@ -436,61 +505,239 @@ export default function MateriaisProfPage() {
               )}
             </AnimatePresence>
 
-            {/* Modal de Registrar Empréstimo */}
+            {/* Modal de Registrar Empréstimo (COM BUSCA E SCROLL - REAPLICADO) */}
             <AnimatePresence>
               {empModalOpen && selectedMaterial && (
-                <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <motion.div
+                  className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
                   <div className="absolute inset-0 bg-black/50" onClick={() => { setEmpModalOpen(false); setEmpForm(null); }} />
-                  <motion.div className="relative bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6 z-10 shadow-2xl" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}>
+                  <motion.div
+                    // MUDANÇA ESSENCIAL PARA SCROLL: Adiciona flex-col e max-h-[90vh] para limitar a altura do modal à tela
+                    className="relative bg-white dark:bg-gray-800 rounded-xl max-w-lg w-full p-6 z-10 shadow-2xl flex flex-col max-h-[90vh]" 
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 20, opacity: 0 }}
+                  >
+                    {/* Cabeçalho Fixo */}
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Registrar Empréstimo</h3>
-                    <div className="text-sm text-gray-600 dark:text-gray-300 mb-4">Material: <span className="font-medium">{selectedMaterial.nome_material}</span></div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                      Material: <span className="font-medium">{selectedMaterial.nome_material}</span>
+                    </div>
 
-                    <div className="space-y-3">
+                    {/* Corpo do Formulário Scrollável */}
+                    {/* MUDANÇA ESSENCIAL PARA SCROLL: Adiciona overflow-y-auto e flex-grow para permitir scroll no conteúdo */}
+                    <div className="space-y-4 overflow-y-auto flex-grow pr-2 -mr-2"> 
+                      {/* Campo de Seleção de Estagiário/Visitante COM BUSCA */}
                       <div>
-                        <label className="text-sm text-gray-500">Estagiário</label>
-                        <select className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700" value={empForm?.id_estagiario ?? ''} onChange={(e) => setEmpForm(s => ({ ...(s||{}), id_estagiario: e.target.value ? Number(e.target.value) : null }))}>
-                          <option value="">Selecione um estagiário...</option>
-                          {estagiariosList.map((est:any) => (
-                            <option key={est.id} value={est.id}>{est.nome || est.nome_completo || `#${est.id}`}</option>
+                        <label className="text-sm text-gray-500">Beneficiário</label>
+                        {/* Input de Busca para o beneficiário */}
+                        <div className="relative mb-2">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            placeholder="Buscar estagiário por nome..."
+                            value={beneficiarioSearchTerm}
+                            onChange={(e) => setBeneficiarioSearchTerm(e.target.value)}
+                            className="w-full pl-8 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                          />
+                        </div>
+
+                        {/* Select principal */}
+                        <select
+                          className="w-full p-2 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          value={empForm?.id_beneficiario ?? ''} // Usamos id_beneficiario para ser genérico
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const isVisitante = value === '-1';
+                            
+                            setEmpForm(s => ({ 
+                              ...(s || {}), 
+                              id_beneficiario: value ? Number(value) : null,
+                              id_estagiario: isVisitante ? null : (value ? Number(value) : null),
+                              // Reinicia os campos de visitante se mudar de 'Visitante' para 'Estagiário'
+                              ...(!isVisitante ? { 
+                                nome_visitante: null, 
+                                genero_visitante: null, 
+                                telefone_visitante: null, 
+                                email_visitante: null, 
+                                morada_visitante: null, 
+                                curso_visitante: null, 
+                                turma_visitante: null, 
+                                numero_processo_visitante: null 
+                              } : {})
+                            }));
+                          }}
+                        >
+                          <option value="">Selecione um beneficiário...</option>
+                          {/* Usa a lista filtrada */}
+                          {filteredEstagiariosList.map((est: any) => (
+                            <option key={est.id} value={est.id}>
+                              {est.nome || est.nome_completo || `#${est.id}`}
+                            </option>
                           ))}
+                          {/* Opção para Visitante (usamos valor -1 para indicar visitante) */}
+                          <option value="-1">
+                            **Visitante**
+                          </option>
                         </select>
                       </div>
 
+                      {/* Campos Adicionais para Visitante (LAYOUT MELHORADO) */}
+                      {(empForm?.id_beneficiario === -1) && (
+                        // NOVO ESTILO E LAYOUT DE GRID
+                        <div className="space-y-4 p-4 border border-blue-400 border-dashed bg-blue-50 dark:bg-gray-700/50 rounded-lg">
+                          <h4 className="text-md font-bold text-blue-600 dark:text-blue-300">Detalhes do Visitante (Obrigatório *)</h4>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              
+                              {/* Nome */}
+                              <div>
+                                  <label className="text-sm text-gray-500">Nome <span className="text-red-500">*</span></label>
+                                  <input type="text" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                      value={empForm?.nome_visitante ?? ''}
+                                      onChange={(e) => setEmpForm(s => ({ ...(s || {}), nome_visitante: e.target.value }))}
+                                  />
+                              </div>
+
+                              {/* Gênero */}
+                              <div>
+                                  <label className="text-sm text-gray-500">Gênero <span className="text-red-500">*</span></label>
+                                  <select className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                      value={empForm?.genero_visitante ?? ''}
+                                      onChange={(e) => setEmpForm(s => ({ ...(s || {}), genero_visitante: e.target.value }))}
+                                  >
+                                      <option value="">Selecione</option>
+                                      <option value="Masculino">Masculino</option>
+                                      <option value="Feminino">Feminino</option>
+                                  </select>
+                              </div>
+
+                              {/* Telefone */}
+                              <div>
+                                  <label className="text-sm text-gray-500">Telefone</label>
+                                  <input type="tel" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                      value={empForm?.telefone_visitante ?? ''}
+                                      onChange={(e) => setEmpForm(s => ({ ...(s || {}), telefone_visitante: e.target.value }))}
+                                  />
+                              </div>
+                              
+                              {/* Email */}
+                              <div>
+                                  <label className="text-sm text-gray-500">Email</label>
+                                  <input type="email" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                      value={empForm?.email_visitante ?? ''}
+                                      onChange={(e) => setEmpForm(s => ({ ...(s || {}), email_visitante: e.target.value }))}
+                                  />
+                              </div>
+
+                              {/* Curso */}
+                              <div>
+                                  <label className="text-sm text-gray-500">Curso</label>
+                                  <input type="text" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                      value={empForm?.curso_visitante ?? ''}
+                                      onChange={(e) => setEmpForm(s => ({ ...(s || {}), curso_visitante: e.target.value }))}
+                                  />
+                              </div>
+
+                              {/* Turma */}
+                              <div>
+                                  <label className="text-sm text-gray-500">Turma</label>
+                                  <input type="text" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                      value={empForm?.turma_visitante ?? ''}
+                                      onChange={(e) => setEmpForm(s => ({ ...(s || {}), turma_visitante: e.target.value }))}
+                                  />
+                              </div>
+
+                              {/* Processo (Ocupa a linha toda em telas pequenas, mas só metade em telas maiores) */}
+                              <div className="sm:col-span-2">
+                                  <label className="text-sm text-gray-500">Número de Processo (Opcional)</label>
+                                  <input type="text" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                      value={empForm?.numero_processo_visitante ?? ''}
+                                      onChange={(e) => setEmpForm(s => ({ ...(s || {}), numero_processo_visitante: e.target.value }))}
+                                  />
+                              </div>
+                          </div>
+
+                          {/* Morada (Campo Longo - Ocupa a linha toda) */}
+                          <div>
+                              <label className="text-sm text-gray-500">Morada</label>
+                              <textarea className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                  value={empForm?.morada_visitante ?? ''}
+                                  rows={2}
+                                  onChange={(e) => setEmpForm(s => ({ ...(s || {}), morada_visitante: e.target.value }))}
+                              />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Campos de Data (Visíveis para Estagiário e Visitante) */}
                       <div>
                         <label className="text-sm text-gray-500">Data Início</label>
-                        <input type="date" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700" value={empForm?.data_inicio ?? ''} onChange={(e)=> setEmpForm(s => ({ ...(s||{}), data_inicio: e.target.value }))} />
+                        <input type="date" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white" value={empForm?.data_inicio ?? ''} onChange={(e)=> setEmpForm(s => ({ ...(s||{}), data_inicio: e.target.value }))} />
                       </div>
 
                       <div>
                         <label className="text-sm text-gray-500">Data de Entrega (com horário)</label>
-                        <input type="datetime-local" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700" value={empForm?.data_final ?? ''} onChange={(e)=> setEmpForm(s => ({ ...(s||{}), data_final: e.target.value }))} />
-                      </div>
-
-                      <div className="flex justify-end space-x-2 pt-2">
-                        <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => { setEmpModalOpen(false); setEmpForm(null); }}>Cancelar</button>
-                        <button className="px-4 py-2 bg-green-600 text-white rounded" onClick={async ()=>{
-                          if (!empForm?.id_estagiario) { try { toast.showToast('Selecione um estagiário antes de continuar', 'info'); } catch(e){}; return; }
-                          try {
-                            const payload:any = {
-                              id_material: selectedMaterial.id,
-                              id_estagiario: empForm.id_estagiario,
-                              // DB expects DATE columns (YYYY-MM-DD). We format accordingly.
-                              data_inicio: formatDateOnly(empForm.data_inicio) ?? formatDateOnly(new Date().toISOString()),
-                              data_final: formatDateOnly(empForm.data_final) ?? null,
-                            };
-                            await api.post('/emprestimos', payload);
-                            try { toast.showToast('Empréstimo registrado com sucesso', 'success'); } catch(e){}
-                            setEmpModalOpen(false);
-                            setEmpForm(null);
-                            // Optionally refresh materiais list if backend changes quantities/status
-                            await reloadMateriais();
-                          } catch (err:any) {
-                            console.error('Erro ao registrar empréstimo', err);
-                            try { toast.showToast('Erro ao registrar empréstimo: ' + (err?.response?.data?.error || err?.message || ''), 'error'); } catch(e){}
-                          }
-                        }}>Registrar</button>
+                        <input type="datetime-local" className="w-full p-2 mt-1 rounded border bg-white dark:bg-gray-700 text-gray-900 dark:text-white" value={empForm?.data_final ?? ''} onChange={(e)=> setEmpForm(s => ({ ...(s||{}), data_final: e.target.value }))} />
                       </div>
                     </div>
+                    
+                    {/* Rodapé Fixo com Botões */}
+                    <div className="flex justify-end space-x-2 pt-4 border-t dark:border-gray-700 mt-4">
+                        <button className="px-4 py-2 bg-gray-200 rounded text-gray-800 dark:bg-gray-700 dark:text-white" onClick={() => { setEmpModalOpen(false); setEmpForm(null); }}>Cancelar</button>
+                        <button className="px-4 py-2 bg-green-600 text-white rounded" onClick={async ()=>{
+                            const isVisitante = empForm?.id_beneficiario === -1;
+                            
+                            // Validação para Estagiário
+                            if (!isVisitante && (!empForm?.id_beneficiario || empForm?.id_beneficiario <= 0)) { 
+                                try { toast.showToast('Selecione um estagiário ou visitante antes de continuar', 'info'); } catch(e){}; return; 
+                            }
+                            
+                            // Validação mínima para Visitante
+                            if (isVisitante && (!empForm?.nome_visitante || !empForm?.genero_visitante)) {
+                                 try { toast.showToast('Preencha o Nome e Gênero do Visitante', 'info'); } catch(e){}; return;
+                            }
+
+                            try {
+                              const payload:any = {
+                                id_material: selectedMaterial.id,
+                                
+                                data_inicio: formatDateOnly(empForm.data_inicio) ?? formatDateOnly(new Date().toISOString()),
+                                data_final: formatDateOnly(empForm.data_final) ?? null,
+                                
+                                // Determina o payload com base na seleção
+                                ...(isVisitante ? {
+                                    id_estagiario: null, // Assegura que id_estagiario é nulo ou ausente
+                                    // Campos de visitante a serem enviados para a API (o backend precisa lidar com eles)
+                                    nome_visitante: empForm.nome_visitante,
+                                    genero_visitante: empForm.genero_visitante,
+                                    numero_processo_visitante: empForm.numero_processo_visitante,
+                                    telefone_visitante: empForm.telefone_visitante,
+                                    email_visitante: empForm.email_visitante,
+                                    morada_visitante: empForm.morada_visitante,
+                                    curso_visitante: empForm.curso_visitante,
+                                    turma_visitante: empForm.turma_visitante,
+                                } : {
+                                    id_estagiario: empForm.id_beneficiario, // Se não for -1, é o ID do estagiário
+                                }),
+                              };
+                              
+                              await api.post('/emprestimos', payload);
+                              try { toast.showToast('Empréstimo registrado com sucesso', 'success'); } catch(e){}
+                              setEmpModalOpen(false);
+                              setEmpForm(null);
+                              await reloadMateriais();
+                            } catch (err:any) {
+                              console.error('Erro ao registrar empréstimo', err);
+                              try { toast.showToast('Erro ao registrar empréstimo: ' + (err?.response?.data?.error || err?.message || ''), 'error'); } catch(e){}
+                            }
+                        }}>Registrar</button>
+                      </div>
+                    
                   </motion.div>
                 </motion.div>
               )}

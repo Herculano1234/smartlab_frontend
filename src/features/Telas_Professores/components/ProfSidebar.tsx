@@ -20,6 +20,7 @@ interface NavLinkItem {
 
 const navLinks: NavLinkItem[] = [
   { to: "/professor", icon: "fas fa-home", label: "Início" },
+  { to: "/professor/grupos", icon: "fas fa-layer-group", label: "Grupos" },
   { to: "/professor/estagiarios", icon: "fas fa-users", label: "Estagiários" },
   { to: "/professor/estagios", icon: "fas fa-briefcase", label: "Estágios" },
   { to: "/professor/emprestimos", icon: "fas fa-calendar-check", label: "Empréstimos" },

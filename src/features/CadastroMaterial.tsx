@@ -118,11 +118,11 @@ export default function CadastroMaterial() {
       try {
         // try the newer endpoint first, fallback if not available
         try {
-          const resp = await api.get("/tipo_material");
+          const resp = await api.get("/tipo/material");
           if (!mounted) return;
           setTipos(Array.isArray(resp.data) ? resp.data : []);
         } catch (err) {
-          const resp2 = await api.get("/tipo_material");
+          const resp2 = await api.get("/tipo/material");
           if (!mounted) return;
           setTipos(Array.isArray(resp2.data) ? resp2.data : []);
         }
