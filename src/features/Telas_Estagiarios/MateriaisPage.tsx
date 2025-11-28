@@ -37,26 +37,26 @@ export default function MateriaisCard({ estagiario }: any) {
   // --- LÓGICA DE BUSCA DE DADOS ---
 
   // 1. Efeito para buscar os EMPRÉSTIMOS do estagiário (mantido)
-  useEffect(() => {
-		if (!estagiario?.id) return;
-		(async () => {
-			try {
-				const res = await api.get('/emprestimos');
-				const rows = res.data;
-				const filtered = Array.isArray(rows) ? rows.filter((e: any) => String(e.estagiario_id) === String(estagiario.id)) : [];
-				setEmprestimos(filtered.slice(0, 6));
-			} catch (err) {
-				console.error('Erro ao carregar empréstimos do estagiário', err);
-				setEmprestimos([]);
-			}
-		})();
-  }, [estagiario]);
+	const fetchEmprestimos = async () => {
+		if (!estagiario?.id) return setEmprestimos([]);
+		try {
+			const res = await api.get('/emprestimos');
+			const rows = res.data;
+			const filtered = Array.isArray(rows) ? rows.filter((e: any) => String(e.estagiario_id) === String(estagiario.id)) : [];
+			setEmprestimos(filtered.slice(0, 6));
+		} catch (err) {
+			console.error('Erro ao carregar empréstimos do estagiário', err);
+			setEmprestimos([]);
+		}
+	};
+
+	useEffect(() => { fetchEmprestimos(); }, [estagiario]);
 
   // 2. NOVO Efeito para buscar o INVENTÁRIO DISPONÍVEL (substituindo o mock)
 	useEffect(() => {
 		setIsLoadingInventario(true);
 		// Consumir o endpoint central de materiais do backend usando axios (api)
-		(async () => {
+		const fetchMateriaisDisponiveis = async () => {
 			try {
 				const res = await api.get<any[]>('/materiais');
 				const rows: any[] = res.data;
@@ -77,7 +77,9 @@ export default function MateriaisCard({ estagiario }: any) {
 			} finally {
 				setIsLoadingInventario(false);
 			}
-		})();
+		};
+
+		fetchMateriaisDisponiveis();
   }, []); // Roda apenas uma vez ao montar o componente
   
   // --- LÓGICA DE UI E AÇÕES (MANTIDA) ---
@@ -112,39 +114,69 @@ export default function MateriaisCard({ estagiario }: any) {
   
 	const handleSolicitarMaterial = async (material: MaterialInventario) => {
 		if (!estagiario?.id) return alert('Estagiário não identificado. Faça login.');
-		console.log(`Solicitando empréstimo do material: ${material.nome}`);
+
+		// 1. Interação com usuário: quantidade
+		const quantidadeStr = prompt(`Quantas unidades de "${material.nome}" você deseja solicitar? (Máx. ${material.disponivel})`, '1');
+		if (quantidadeStr === null) return; // cancelado
+		const quantidade = parseInt(quantidadeStr, 10);
+		if (isNaN(quantidade) || quantidade <= 0 || quantidade > (material.disponivel || 1)) {
+			return alert(`Quantidade inválida. Por favor, insira um número entre 1 e ${material.disponivel || 1}.`);
+		}
+
+		// 2. Interação com usuário: período em dias
+		const periodoStr = prompt(`Por quantos dias você precisa de ${quantidade}x "${material.nome}"? (Máx. recomendado: 30)`, '7');
+		if (periodoStr === null) return;
+		const periodoDias = parseInt(periodoStr, 10);
+		if (isNaN(periodoDias) || periodoDias <= 0 || periodoDias > 365) {
+			return alert('Período de empréstimo inválido. Por favor, insira um número de dias válido.');
+		}
+
+		const dataFim = new Date();
+		dataFim.setDate(dataFim.getDate() + periodoDias);
+		const dataFimStr = dataFim.toLocaleDateString('pt-BR');
+
+		const confirmacao = confirm(`Confirma a solicitação de ${quantidade} unidade(s) de "${material.nome}"?\n\nPrevisão de devolução: ${dataFimStr}`);
+		if (!confirmacao) return;
 
 		try {
-			// data_inicio no formato YYYY-MM-DD
 			const hoje = new Date().toISOString().split('T')[0];
-
-			const body = {
+			const body: any = {
 				id_material: material.id,
 				id_estagiario: estagiario.id,
-				data_inicio: hoje
-			} as any;
+				data_inicio: hoje,
+				quantidade: quantidade,
+				data_previsao_devolucao: dataFim.toISOString().split('T')[0]
+			};
 
 			const postResp = await api.post('/emprestimos', body);
-			const novo = postResp.data;
-			// backend returns the created emprestimo (may not include nome_material joined)
-			// Recarregar lista de empréstimos para garantir nome_material e dados completos
-			try {
-				const r2 = await api.get('/emprestimos');
-				const all = r2.data;
-				const filtered = Array.isArray(all) ? all.filter((e:any) => String(e.estagiario_id) === String(estagiario.id)) : [];
-				setEmprestimos(filtered.slice(0, 6));
-			} catch (e) {
-				// fallback: append the created row locally
-				setEmprestimos(prev => [novo, ...prev].slice(0, 6));
-			}
 
-			// decrement availability in UI if material matched
-			setMateriaisDisponiveis(prev => prev.map(m => m.id === material.id ? { ...m, disponivel: Math.max(0, (m.disponivel || 1) - 1) } : m));
+			// Atualiza histórico e inventário (refetch)
+			await fetchEmprestimos();
+			// refetch materiais para refletir mudança de estoque
+			// call the same function used in the useEffect by triggering its IIFE: create a local refetch
+			(async () => {
+				try {
+					const res = await api.get('/materiais');
+					const rows: any[] = res.data;
+					const normalized = rows.map((r: any) => ({
+						id: r.id,
+						nome: r.nome_material || r.nome || 'Material',
+						descricao: r.descricao || r.descricao_curta || '',
+						disponivel: typeof r.disponivel !== 'undefined' ? r.disponivel : (typeof r.quantidade !== 'undefined' ? r.quantidade : 1),
+						imageUrl: r.foto || r.imageUrl || '/public/item-placeholder.png',
+						qrId: r.code_id || r.code || '',
+						categoria: r.nome_tipo || r.categoria || '—'
+					} as MaterialInventario));
+					setMateriaisDisponiveis(normalized);
+				} catch (e) {
+					console.warn('Falha ao recarregar inventário após solicitar:', e);
+				}
+			})();
 
-			alert(`Empréstimo solicitado com sucesso para "${material.nome}"`);
+			alert(`🎉 Solicitação de ${quantidade}x "${material.nome}" registrada com sucesso!`);
 		} catch (err: any) {
 			console.error('Erro ao solicitar material', err?.message || err);
-			alert('Erro ao solicitar material: ' + (err?.message || 'Erro desconhecido'));
+			alert('❌ Erro ao solicitar material: ' + (err?.message || 'Erro desconhecido'));
 		}
 	};
   

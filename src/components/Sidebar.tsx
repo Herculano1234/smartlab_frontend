@@ -7,7 +7,6 @@ import { HiMenu, HiX, HiHome, HiUserGroup, HiDocumentText, HiChartBar, HiCog, Hi
 const navItems = [
   { path: "/estagiario", label: "Dashboard", icon: <HiHome className="w-5 h-5" /> },
   { path: "/estagiario/turma", label: "turma", icon: <HiUserGroup className="w-5 h-5" /> },
-  { path: "/estagiario/presencas", label: "Presenças", icon: <HiUserGroup className="w-5 h-5" /> },
   { path: "/estagiario/materiais", label: "Materiais", icon: <HiDocumentText className="w-5 h-5" /> },
   { path: "/estagiario/relatorios", label: "Relatórios", icon: <HiChartBar className="w-5 h-5" /> },
   { path: "/estagiario/perfil", label: "Perfil", icon: <HiCog className="w-5 h-5" /> },

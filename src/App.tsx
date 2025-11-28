@@ -5,7 +5,6 @@ import Login from "./features/auth/Login";
 import LandingPage from "./features/LandingPage";
 import Signup from "./features/auth/Signup";
 import EstagiarioHome from './features/Telas_Estagiarios/EstagiarioHome';
-import PresencasPage from './features/Telas_Estagiarios/PresencasPage';
 import MateriaisPage from './features/Telas_Estagiarios/MateriaisPage';
 import RelatoriosPage from './features/Telas_Estagiarios/RelatoriosPage';
 import PerfilPage from './features/Telas_Estagiarios/PerfilPage';
@@ -74,7 +73,6 @@ function App() {
       <Route element={<RequireAuth perfil="estagiario" />}>
         <Route path="/estagiario" element={<ProfissionalLayout />}>
           <Route index element={<EstagiarioHome />} />
-          <Route path="presencas" element={<PresencasPage />} />
           <Route path="materiais" element={<MateriaisPage />} />
           <Route path="relatorios" element={<RelatoriosPage />} />
           <Route path="perfil" element={<PerfilPage />} />
