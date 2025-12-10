@@ -157,7 +157,7 @@ export default function ProfessorHome() {
             Icon: Users,
             color: 'border-sky-600',
             action: 'Ver Lista',
-            link: '/estagiarios'
+            link: '/professor/estagiarios'
           },
           {
             title: 'Empréstimos Ativos',
@@ -166,7 +166,7 @@ export default function ProfessorHome() {
             Icon: Package,
             color: 'border-blue-800',
             action: 'Gerir Empréstimos',
-            link: '/materiais/emprestimos'
+            link: '/professor/emprestimos'
           },
           {
             title: 'Total de Materiais',
@@ -175,7 +175,7 @@ export default function ProfessorHome() {
             Icon: PlayCircle,
             color: 'border-green-600',
             action: 'Ver Materiais',
-            link: '/materiais'
+            link: '/professor/materiais'
           },
           // Complementamos com indicadores derivados localmente (ex.: relatórios pendentes)
           {
@@ -185,7 +185,7 @@ export default function ProfessorHome() {
             Icon: FileText,
             color: 'border-red-600',
             action: 'Avaliar',
-            link: '/relatorios'
+            link: '/professor/relatorios'
           }
         ];
 
