@@ -18,7 +18,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: "/estagiario", label: "Dashboard", icon: <HiHome className="w-5 h-5" /> },
-  { path: "/estagiario/turma", label: "Turma", icon: <HiUserGroup className="w-5 h-5" /> },
   { path: "/estagiario/materiais", label: "Materiais", icon: <HiDocumentText className="w-5 h-5" /> },
   { path: "/estagiario/relatorios", label: "Relatórios", icon: <HiChartBar className="w-5 h-5" /> },
   { path: "/estagiario/perfil", label: "Perfil", icon: <HiCog className="w-5 h-5" /> },
