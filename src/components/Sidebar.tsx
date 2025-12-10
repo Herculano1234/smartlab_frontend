@@ -1,38 +1,43 @@
 ﻿import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-// Adicionando ícone para o colapso
-import { HiMenu, HiX, HiHome, HiUserGroup, HiDocumentText, HiChartBar, HiCog, HiChevronLeft } from "react-icons/hi";
+// Ícones usando react-icons
+import { HiHome, HiUserGroup, HiDocumentText, HiChartBar, HiCog } from "react-icons/hi";
 
-// Importações dos ícones (mantidas como estão, usando 'hi' do react-icons)
-const navItems = [
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  onToggleCompact: () => void;
+}
+
+// Estrutura de navegação com ícones
+interface NavItem {
+  path: string;
+  label: string;
+  icon: React.ReactNode;
+}
+
+const navItems: NavItem[] = [
   { path: "/estagiario", label: "Dashboard", icon: <HiHome className="w-5 h-5" /> },
-  { path: "/estagiario/turma", label: "turma", icon: <HiUserGroup className="w-5 h-5" /> },
+  { path: "/estagiario/turma", label: "Turma", icon: <HiUserGroup className="w-5 h-5" /> },
   { path: "/estagiario/materiais", label: "Materiais", icon: <HiDocumentText className="w-5 h-5" /> },
   { path: "/estagiario/relatorios", label: "Relatórios", icon: <HiChartBar className="w-5 h-5" /> },
   { path: "/estagiario/perfil", label: "Perfil", icon: <HiCog className="w-5 h-5" /> },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose, onToggleCompact }: Props) {
   const location = useLocation();
-  // Estado para controlar a abertura/fechamento em mobile (como estava)
-  const [isOpen, setIsOpen] = useState(false);
-  // NOVO: Estado para controlar se o menu está expandido (em desktop)
-  const [isExpanded, setIsExpanded] = useState(true);
+  // Estado local para gerenciar o modo compactado/expandido no desktop
+  const [isCompact, setIsCompact] = useState(false);
 
-  // Verificar se é dispositivo móvel ou tela grande
+  // Ajusta o estado 'isCompact' com base no tamanho da tela
   useEffect(() => {
     const checkViewport = () => {
-      // Em telas maiores que 1280px (xl), expande por padrão
+      // Em telas XL ou maiores (1280px+), expande por padrão
+      // Em telas LG (1024px+), compacta para maximizar conteúdo
       if (window.innerWidth >= 1280) {
-        setIsExpanded(true); 
-        setIsOpen(false); // Garante que o menu mobile está fechado
+        setIsCompact(false);
       } else if (window.innerWidth >= 1024) {
-        // Em telas entre 1024px e 1280px (lg), inicia colapsado para maximizar conteúdo
-        setIsExpanded(false);
-        setIsOpen(false);
-      } else {
-        // Mobile
-        setIsExpanded(false);
+        setIsCompact(true);
       }
     };
     
@@ -44,98 +49,95 @@ export default function Sidebar() {
   // Fechar menu ao mudar de rota em mobile
   useEffect(() => {
     if (isOpen) {
-      setIsOpen(false);
+      onClose();
     }
-  }, [location]); // Fecha o menu sempre que a rota mudar, independente do estado mobile/desktop
+  }, [location]);
 
-  // Determina a largura base: W-64 se expandido, W-20 se colapsado, W-64 em mobile
-  const sidebarWidthClass = isExpanded ? 'w-64' : 'w-20';
-  
-  // O logo e os rótulos só aparecem se o menu estiver expandido
-  const showLabels = isExpanded;
+  // Determina a largura base com base no estado compacto
+  const sidebarWidthClass = isCompact ? 'w-20' : 'w-64';
+  const showLabels = !isCompact;
 
   return (
     <>
-      {/* Botão de hambúrguer para mobile */}
-      <button
-        className={`fixed z-50 p-3 rounded-xl shadow-lg bg-sky-600 text-white m-4 transition-all duration-300 lg:hidden 
-          ${isOpen ? 'left-64' : 'left-4'}`}
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
-      >
-        {isOpen ? <HiX size={24} /> : <HiMenu size={24} />}
-      </button>
-
       {/* Overlay para mobile */}
       {isOpen && (
         <div 
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 backdrop-blur-sm lg:hidden"
-          onClick={() => setIsOpen(false)}
+          className="fixed inset-0 z-30 bg-gray-900 bg-opacity-50 transition-opacity lg:hidden"
+          onClick={onClose}
+          aria-hidden={!isOpen}
         />
       )}
 
       {/* Barra lateral */}
       <aside
-        className={`fixed lg:relative z-50 h-full bg-white dark:bg-gray-800 shadow-xl flex flex-col justify-between 
-          transform transition-all duration-300 ease-in-out border-r border-gray-100 dark:border-gray-700
-          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          ${sidebarWidthClass}`}
+        className={`bg-white dark:bg-gray-800 shadow-xl ${sidebarWidthClass}
+          transform transition-all duration-300 ease-in-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} 
+          fixed lg:static inset-y-0 left-0 z-40 border-r border-gray-100 dark:border-gray-700`}
       >
-        
-        {/* Logo/Header */}
-        <div className={`p-4 flex items-center ${showLabels ? 'justify-between' : 'justify-center'} border-b dark:border-gray-700 h-20`}>
-          <div className="flex items-center space-x-2">
-            <div className="bg-sky-600 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold">S</span>
-            </div>
-            <span className={`text-xl font-bold text-sky-600 transition-opacity duration-300 ${showLabels ? 'opacity-100' : 'opacity-0 hidden'}`}>
+        <div className="h-full flex flex-col py-6 px-4">
+          
+          {/* Logo/Header */}
+          <div className={`mb-8 flex items-center ${showLabels ? 'justify-between' : 'justify-center'} gap-3 border-b border-gray-200 dark:border-gray-700 pb-4`}>
+            <div className="flex items-center gap-2">
+              <div className="bg-sky-600 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold text-sm">S</span>
+              </div>
+              <span className={`text-lg font-bold text-sky-600 transition-opacity duration-300 ${showLabels ? 'opacity-100' : 'opacity-0 hidden'}`}>
                 SmartLab
-            </span>
+              </span>
+            </div>
+            
+            {/* Botão de toggle para desktop */}
+            <button 
+              className={`text-gray-500 hover:text-sky-600 dark:text-gray-400 dark:hover:text-sky-400 p-1 rounded-full ml-auto hidden xl:block transition-all duration-300`}
+              onClick={() => {
+                setIsCompact(!isCompact);
+                onToggleCompact();
+              }}
+              aria-label={isCompact ? "Expandir Sidebar" : "Compactar Sidebar"}
+            >
+              <i className={`fas ${isCompact ? 'fa-angle-right' : 'fa-angle-left'} text-lg`}></i>
+            </button>
           </div>
           
-          {/* Botão de colapso para Desktop/Tablet */}
-          <button 
-            className={`text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white transition-all duration-300 hidden lg:flex items-center justify-center 
-                        ${showLabels ? 'xl:opacity-100' : 'opacity-0 xl:opacity-0'} w-6 h-6`}
-            onClick={() => setIsExpanded(!isExpanded)}
-            aria-label={isExpanded ? "Colapsar menu" : "Expandir menu"}
-          >
-            <HiChevronLeft size={20} className={isExpanded ? '' : 'rotate-180'} />
-          </button>
-        </div>
-        
-        {/* Navegação */}
-        <nav className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`
-                flex items-center ${showLabels ? 'justify-start' : 'justify-center'} gap-3 py-3 px-4 rounded-xl transition-all duration-200
-                hover:bg-sky-100 dark:hover:bg-gray-700 hover:text-sky-600 dark:hover:text-white
-                ${
-                  location.pathname === item.path
-                    ? 'bg-sky-100 dark:bg-gray-700 font-semibold text-sky-600 dark:text-white shadow-sm' // Estado ativo moderno
-                    : 'text-gray-700 dark:text-gray-300'
-                }
-              `}
-            >
-              <span className="flex-shrink-0">{item.icon}</span>
-              <span className={`text-sm transition-opacity duration-300 whitespace-nowrap ${showLabels ? 'opacity-100' : 'opacity-0 hidden'}`}>
-                {item.label}
-              </span>
-            </Link>
-          ))}
-        </nav>
-        
-        {/* Rodapé (Informações do Usuário) */}
-        <div className={`p-4 border-t dark:border-gray-700 transition-opacity duration-300 ${showLabels ? 'h-24' : 'h-16 flex items-center justify-center'}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-sky-200 border-2 border-sky-600 rounded-full w-10 h-10 flex-shrink-0" />
-              <div className={`transition-opacity duration-300 ${showLabels ? 'opacity-100' : 'opacity-0 hidden'}`}>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Dr. Herculano</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Administrador</p>
+          {/* Navegação */}
+          <nav className="flex-1 overflow-y-auto">
+            <ul className="space-y-2">
+              {navItems.map((item) => {
+                const isActive = location.pathname === item.path;
+                const baseClasses = "flex items-center gap-3 py-2 rounded-lg font-medium transition duration-200 ease-in-out";
+                const activeClasses = "bg-sky-500 text-white shadow-md shadow-sky-500/50";
+                const inactiveClasses = "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-sky-600 dark:hover:text-sky-400";
+                
+                return (
+                  <li key={item.path}>
+                    <Link
+                      to={item.path}
+                      onClick={onClose}
+                      className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses} ${isCompact ? 'justify-center px-0' : 'px-4'}`}
+                      title={isCompact ? item.label : undefined}
+                    >
+                      <span className={`flex-shrink-0 ${isCompact ? 'text-xl' : ''}`}>{item.icon}</span>
+                      <span className={`transition-opacity duration-300 ${showLabels ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                        {item.label}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+          
+          {/* Rodapé - Informações do Usuário */}
+          <div className={`mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 transition-opacity duration-300 ${showLabels ? 'h-auto' : 'h-auto flex items-center justify-center'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-sky-200 border-2 border-sky-600 rounded-full w-10 h-10 flex-shrink-0" />
+                <div className={`transition-opacity duration-300 ${showLabels ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Dr. Herculano</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Estagiário</p>
+                </div>
               </div>
             </div>
           </div>

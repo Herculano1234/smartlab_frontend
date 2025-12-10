@@ -1,6 +1,7 @@
 ﻿import React from "react";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
+import { ToastProvider } from "./components/ToastContext";
 import Login from "./features/auth/Login";
 import LandingPage from "./features/LandingPage";
 import Signup from "./features/auth/Signup";
@@ -46,16 +47,32 @@ function RequireGuest({ children }: { children: React.ReactNode }) {
 }
 
 function ProfissionalLayout() {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [isCompact, setIsCompact] = React.useState(false);
+
+  const handleToggleSidebar = () => setIsOpen(!isOpen);
+  const handleCloseSidebar = () => setIsOpen(false);
+  const handleToggleCompact = () => setIsCompact(!isCompact);
+
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Navbar />
-        <main className="flex-1 p-6">
-          <Outlet />
-        </main>
+    <ToastProvider>
+      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Sidebar 
+          isOpen={isOpen} 
+          onClose={handleCloseSidebar} 
+          onToggleCompact={handleToggleCompact}
+        />
+        <div className="flex-1 flex flex-col">
+          <Navbar 
+            onToggleSidebar={handleToggleSidebar}
+            title="Smart Lab ITEL"
+          />
+          <main className="flex-1 p-6">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </ToastProvider>
   );
 }
 
