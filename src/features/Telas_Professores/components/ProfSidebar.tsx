@@ -17,7 +17,6 @@ interface NavLinkItem {
   label: string;
 }
 
-
 const navLinks: NavLinkItem[] = [
   { to: "/professor", icon: "fas fa-home", label: "Início" },
   { to: "/professor/grupos", icon: "fas fa-layer-group", label: "Grupos" },
@@ -52,6 +51,13 @@ export default function ProfSidebar({ isOpen, onClose, onToggleCompact }: Props)
     window.addEventListener("resize", checkViewport);
     return () => window.removeEventListener("resize", checkViewport);
   }, []);
+
+  // Função de logout: limpa auth e força redirecionamento para página inicial com reload completo.
+  const handleLogout = () => {
+    localStorage.removeItem('authToken'); // Ajuste se o nome da chave for diferente
+    onClose();
+    window.location.href = '/'; // Força um reload completo para a página inicial, evitando cache do SPA no botão voltar
+  };
 
   // Determina a largura base para o Tailwind
   const sidebarWidthClass = isCompact ? 'w-20' : 'w-64';
@@ -131,7 +137,10 @@ export default function ProfSidebar({ isOpen, onClose, onToggleCompact }: Props)
 
           {/* Rodapé - Botão Sair */}
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
-            <button className={`w-full text-left py-2 rounded-lg text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition duration-200 ${isCompact ? 'text-center' : 'px-4'}`}>
+            <button 
+              onClick={handleLogout}
+              className={`w-full text-left py-2 rounded-lg text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition duration-200 ${isCompact ? 'text-center' : 'px-4'}`}
+            >
               <i className={`fas fa-sign-out-alt ${isCompact ? 'text-xl' : 'mr-3'}`}></i>
               {/* Esconde o texto 'Sair' no modo compacto */}
               <span className={`transition-opacity duration-300 ${isCompact ? 'opacity-0 hidden' : 'opacity-100 block align-middle'}`}>Sair</span>
